@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# Heroku Python buildpack runs this after pip install.
+# Downloads static ffmpeg+ffprobe so pytgcalls can find ffprobe.
+#
+# FIX: yt-dlp FFmpeg Builds "latest" tag is a rolling release — the .tar.xz
+# filename changes with every nightly build, so curl was silently downloading
+# a redirect/error page instead of the actual archive, leaving ffprobe missing.
+# Now uses johnvansickle.com static builds — stable, versioned, reliable URL.
+
+set -e
+
+# Heroku invokes post_compile from the current slug directory and may expose
+# its path in BUILD_DIR. Do not hard-code /app: that path is runtime-specific
+# and can leave all vendor files outside the slug during compilation.
+BUILD_DIR=${1:-${BUILD_DIR:-$(pwd)}}
+
+VENDOR="$BUILD_DIR/vendor/ffmpeg/bin"
+EXTRACT="$BUILD_DIR/vendor/ffmpeg_tmp"
+
+mkdir -p "$VENDOR" "$EXTRACT"
+
+echo "-----> Installing FFmpeg static build (johnvansickle)"
+
+# johnvansickle static builds — amd64, GPL, self-contained, no shared libs
+FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
+
+echo "       Downloading..."
+if ! curl -fsSL --retry 3 --retry-delay 5 "$FFMPEG_URL" -o "$EXTRACT/ffmpeg.tar.xz"; then
+  echo "       Primary URL failed, trying GitHub mirror..."
+  curl -fsSL --retry 3 --retry-delay 5 \
+    "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-7.1.tar.xz" \
+    -o "$EXTRACT/ffmpeg.tar.xz" || true
+fi
+
+echo "       Extracting..."
+tar -xf "$EXTRACT/ffmpeg.tar.xz" -C "$EXTRACT" 2>/dev/null || \
+  tar -xJf "$EXTRACT/ffmpeg.tar.xz" -C "$EXTRACT" 2>/dev/null || true
+
+# Find and copy the binaries wherever tar put them
+find "$EXTRACT" -name 'ffmpeg'  -type f ! -name '*.xz' -exec cp {} "$VENDOR/ffmpeg"  \; 2>/dev/null || true
+find "$EXTRACT" -name 'ffprobe' -type f ! -name '*.xz' -exec cp {} "$VENDOR/ffprobe" \; 2>/dev/null || true
+
+chmod +x "$VENDOR/ffmpeg" "$VENDOR/ffprobe" 2>/dev/null || true
+
+# Cleanup
+rm -rf "$EXTRACT"
+
+if [ -x "$VENDOR/ffmpeg" ] && [ -x "$VENDOR/ffprobe" ]; then
+  VER=$("$VENDOR/ffmpeg" -version 2>&1 | head -1)
+  echo "       $VER"
+  echo "-----> FFmpeg + ffprobe installed at $VENDOR ✅"
+else
+  echo "       ⚠️  WARNING: ffmpeg/ffprobe binary not found — pytgcalls will fail"
+  echo "          Check Heroku build logs. Add heroku-buildpack-apt and Aptfile"
+  echo "          as a fallback: https://elements.heroku.com/buildpacks/heroku/heroku-buildpack-apt"
+fi
+
+# yt-dlp now needs a JavaScript runtime for YouTube's player challenge.
+# Heroku's Python buildpack does not provide one, so install the portable
+# Deno binary alongside ffmpeg. This is optional at build time: yt-dlp will
+# still use a system Deno if the host already has one.
+DENO_DIR="$BUILD_DIR/vendor/deno/bin"
+DENO_TMP="$BUILD_DIR/vendor/deno_tmp"
+mkdir -p "$DENO_DIR" "$DENO_TMP"
+
+if command -v deno >/dev/null 2>&1; then
+  echo "       Deno already available: $(command -v deno)"
+else
+  echo "-----> Installing Deno for yt-dlp YouTube challenge solving"
+  DENO_URL="https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip"
+  if curl -fsSL --retry 3 --retry-delay 3 "$DENO_URL" -o "$DENO_TMP/deno.zip" \
+    && python - "$DENO_TMP/deno.zip" "$DENO_DIR" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    archive.extract("deno", sys.argv[2])
+PY
+  then
+    chmod +x "$DENO_DIR/deno"
+    echo "       Deno installed at $DENO_DIR/deno ✅"
+  else
+    echo "       ⚠️ Deno download failed; yt-dlp will try the host runtime"
+  fi
+fi
+
+rm -rf "$DENO_TMP"
+
+if [ -x "$DENO_DIR/deno" ]; then
+  "$DENO_DIR/deno" --version | head -3
+elif command -v deno >/dev/null 2>&1; then
+  deno --version | head -3
+fi
+
+# bgutil provides the current YouTube Proof-of-Origin Token provider for
+# yt-dlp. Public Invidious/Piped instances are not a dependable production
+# source, so bundle the pinned plugin and its Deno script provider at build
+# time. The Python plugin is loaded from vendor/.../plugin via youtube.py.
+BGUTIL_VERSION="1.3.1"
+BGUTIL_HOME="$BUILD_DIR/vendor/bgutil-ytdlp-pot-provider"
+BGUTIL_TMP="$BUILD_DIR/vendor/bgutil_tmp"
+BGUTIL_ZIP="$BGUTIL_TMP/bgutil.zip"
+# The release asset contains only the Python plugin. Use the tagged source
+# archive because it also contains server/src/generate_once.ts and the locked
+# Deno/npm dependency manifests.
+BGUTIL_URL="https://github.com/Brainicism/bgutil-ytdlp-pot-provider/archive/refs/tags/${BGUTIL_VERSION}.zip"
+
+rm -rf "$BGUTIL_HOME" "$BGUTIL_TMP"
+mkdir -p "$BGUTIL_HOME" "$BGUTIL_TMP"
+echo "-----> Installing bgutil yt-dlp PO-token provider v${BGUTIL_VERSION}"
+
+if curl -fsSL --retry 3 --retry-delay 3 "$BGUTIL_URL" -o "$BGUTIL_ZIP" \
+  && python - "$BGUTIL_ZIP" "$BGUTIL_TMP/extracted" <<'PY'
+import os
+import sys
+import zipfile
+
+archive_path, output_dir = sys.argv[1:3]
+with zipfile.ZipFile(archive_path) as archive:
+    archive.extractall(output_dir)
+PY
+then
+  BGUTIL_ROOT=$(find "$BGUTIL_TMP/extracted" -mindepth 1 -maxdepth 1 -type d -print -quit)
+  if [ -d "$BGUTIL_ROOT/plugin" ] && [ -f "$BGUTIL_ROOT/server/src/generate_once.ts" ]; then
+    cp -R "$BGUTIL_ROOT/plugin" "$BGUTIL_HOME/plugin"
+    cp -R "$BGUTIL_ROOT/server" "$BGUTIL_HOME/server"
+  else
+    echo "       ⚠️ bgutil archive layout is unexpected; provider will remain inactive"
+    rm -rf "$BGUTIL_HOME"
+  fi
+
+  # Deno resolves the provider's npm: dependencies from package.json and
+  # installs the native canvas permission required by bgutils-js.
+  if [ -x "$DENO_DIR/deno" ]; then
+    BGUTIL_DENO="$DENO_DIR/deno"
+  else
+    BGUTIL_DENO="$(command -v deno || true)"
+  fi
+  if [ -n "$BGUTIL_DENO" ] && [ -f "$BGUTIL_HOME/server/src/generate_once.ts" ]; then
+    if (
+      cd "$BGUTIL_HOME/server"
+      "$BGUTIL_DENO" install --allow-scripts=npm:canvas --frozen
+    ); then
+      mkdir -p "$BGUTIL_HOME/cache"
+      XDG_CACHE_HOME="$BGUTIL_HOME/cache" \
+        "$BGUTIL_DENO" run \
+          --allow-env \
+          --allow-net \
+          "--allow-ffi=$BGUTIL_HOME/server/node_modules" \
+          "--allow-write=$BGUTIL_HOME/cache" \
+          "--allow-read=$BGUTIL_HOME/cache,$BGUTIL_HOME/server/node_modules" \
+          "$BGUTIL_HOME/server/src/generate_once.ts" --version
+      echo "       bgutil plugin + Deno provider installed ✅"
+    else
+      echo "       ⚠️ bgutil Deno dependency install failed; built-in yt-dlp providers remain available"
+    fi
+  else
+    echo "       ⚠️ Deno unavailable; bgutil plugin will remain inactive"
+  fi
+else
+  echo "       ⚠️ bgutil download failed; yt-dlp will use its built-in providers"
+fi
+
+rm -rf "$BGUTIL_TMP"

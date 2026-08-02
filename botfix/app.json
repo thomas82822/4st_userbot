@@ -1,0 +1,77 @@
+{
+  "name": "4ST Prime Core — Telegram Music Userbot",
+  "description": "Telethon + Pyrogram/PyTgCalls Telegram music userbot with zero-disk streaming, Invidious/Piped/JioSaavn/SoundCloud failover, and live GitHub-backed persistence.",
+  "repository": "https://github.com/thomas91929/4st_userbot",
+  "keywords": ["telegram", "userbot", "music", "pyrogram", "telethon", "pytgcalls"],
+  "stack": "heroku-22",
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "standard-2"
+    }
+  },
+  "env": {
+    "TELEGRAM_API_ID": {
+      "description": "Telegram API ID from https://my.telegram.org (API development tools).",
+      "required": true
+    },
+    "TELEGRAM_API_HASH": {
+      "description": "Telegram API hash from https://my.telegram.org (API development tools).",
+      "required": true
+    },
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Bot token for the assistant/menu bot, from @BotFather.",
+      "required": true
+    },
+    "TELEGRAM_PRIMARY_SESSION": {
+      "description": "Telethon session string for the primary/owner userbot account (generate once locally, never share it).",
+      "required": true
+    },
+    "TELEGRAM_PYRO_SESSION": {
+      "description": "Pyrogram session string for the primary/owner account's music engine. Leave blank and set it up later from the bot's Music Setup menu if you don't have one yet.",
+      "required": false
+    },
+    "TELEGRAM_OWNER_ID": {
+      "description": "Your numeric Telegram user ID (owner/admin of this bot).",
+      "required": true
+    },
+    "TELEGRAM_OWNER_USERNAME": {
+      "description": "Your Telegram @username (without the @), used for owner-recognition fallback.",
+      "required": false
+    },
+    "TELEGRAM_LOG_CHANNEL_ID": {
+      "description": "Numeric chat ID of a private channel/group the bot logs deploy/error events to.",
+      "required": false
+    },
+    "TELEGRAM_HELP_LINK": {
+      "description": "A t.me link shown as the 'Help/Report' button (defaults to a placeholder if unset).",
+      "required": false
+    },
+    "GEMINI_API_KEY": {
+      "description": "Google Gemini API key, used for any AI-assisted bot features.",
+      "required": false
+    },
+    "GITHUB_TOKEN": {
+      "description": "A GitHub Personal Access Token (repo scope) used to persist mutable bot data (users, sessions, custom commands, warnings) to a GitHub repo, since Heroku's filesystem is wiped on every restart/deploy.",
+      "required": true
+    },
+    "GITHUB_REPO": {
+      "description": "The 'owner/repo' GitHub repository the bot syncs its data/config.json file to (e.g. yourname/bot-data). Recommended: use a small PRIVATE repo dedicated to this, separate from your bot's source code repo.",
+      "required": true
+    },
+    "GITHUB_BRANCH": {
+      "description": "Branch to sync data/config.json to.",
+      "value": "main",
+      "required": false
+    },
+    "GITHUB_CONFIG_PATH": {
+      "description": "Path (inside GITHUB_REPO) where the bot's config.json is stored.",
+      "value": "data/config.json",
+      "required": false
+    }
+  },
+  "buildpacks": [
+    { "url": "heroku-community/apt" },
+    { "url": "heroku/python" }
+  ]
+}

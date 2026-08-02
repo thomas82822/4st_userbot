@@ -1,0 +1,900 @@
+{
+    "hack": [
+        "<blockquote>\ud83d\udcbb <b>Initializing...</b></blockquote>",
+        "<blockquote>\ud83d\udcbb <b>Bypassing Security...</b></blockquote>",
+        "<blockquote>\ud83d\udcbb <b>Accessing Database...</b></blockquote>",
+        "<blockquote>\ud83d\udcbb <b>Downloading Data [||||      ]</b></blockquote>",
+        "<blockquote>\ud83d\udcbb <b>Downloading Data [||||||||||]</b></blockquote>",
+        "<blockquote>\u2705 <b>Access Granted! \ud83d\ude08</b></blockquote>"
+    ],
+    "bomb": [
+        "\ud83d\udca3",
+        "\ud83d\udca3...",
+        "\ud83d\udca3......",
+        "\ud83d\udca3.........",
+        "\ud83d\udca5 BOOM!"
+    ],
+    "moon": [
+        "\ud83c\udf11",
+        "\ud83c\udf12",
+        "\ud83c\udf13",
+        "\ud83c\udf14",
+        "\ud83c\udf15",
+        "\ud83c\udf16",
+        "\ud83c\udf17",
+        "\ud83c\udf18",
+        "\ud83c\udf11"
+    ],
+    "clock": [
+        "\ud83d\udd5b",
+        "\ud83d\udd52",
+        "\ud83d\udd55",
+        "\ud83d\udd58",
+        "\ud83d\udd5b",
+        "\ud83d\udd52",
+        "\ud83d\udd55",
+        "\ud83d\udd58"
+    ],
+    "hearts": [
+        "\ud83e\udd0d",
+        "\ud83d\udc96",
+        "\ud83d\udc97",
+        "\ud83d\udc93",
+        "\ud83d\udc9e",
+        "\ud83d\udc95",
+        "\ud83d\udc98",
+        "\u2764\ufe0f"
+    ],
+    "pacman": [
+        "\u15e7",
+        "\u15e7 \u26aa",
+        "\u15e7  \u26aa",
+        "\u15e7   \u26aa",
+        "\u15e7    \u26aa",
+        "\u15e7     \u26aa",
+        "\ud83d\udca5"
+    ],
+    "battery": [
+        "\ud83d\udd0b 0%",
+        "\ud83d\udd0b 20%",
+        "\ud83d\udd0b 40%",
+        "\ud83d\udd0b 60%",
+        "\ud83d\udd0b 80%",
+        "\ud83d\udd0b 100% Fully Charged!"
+    ],
+    "runner": [
+        "\ud83c\udfc3",
+        "\ud83c\udfc3\ud83d\udca8",
+        "\ud83c\udfc3\ud83d\udca8\ud83d\udca8",
+        "\ud83c\udfc3\ud83d\udca8\ud83d\udca8\ud83d\udca8",
+        "\ud83c\udfc6 Finish Line!"
+    ],
+    "police": [
+        "\ud83d\ude93",
+        "\ud83d\ude93   \ud83d\ude97",
+        "\ud83d\ude93\ud83d\udca8  \ud83d\ude97",
+        "\ud83d\ude93\ud83d\udca8\ud83d\udca8 \ud83d\ude97\ud83d\udca5",
+        "\ud83d\udea8 BUSTED!"
+    ],
+    "rocket": [
+        "\ud83d\ude80",
+        "\ud83d\ude80.",
+        "\ud83d\ude80..",
+        "\ud83d\ude80...",
+        "\ud83c\udf0d\ud83d\ude80",
+        "\ud83c\udf0d \ud83d\ude80",
+        "\ud83c\udf0d  \ud83d\ude80",
+        "\ud83c\udf0d   \ud83d\ude80\ud83d\udef8",
+        "\ud83d\udca5"
+    ],
+    "magic": [
+        "\ud83e\ude84",
+        "\ud83e\ude84\u2728",
+        "\ud83e\ude84\u2728\ud83d\udc07",
+        "\ud83e\ude84\u2728\ud83d\udd4a\ufe0f",
+        "\ud83c\udfa9 Ta-da!"
+    ],
+    "monkey": [
+        "\ud83d\ude48",
+        "\ud83d\ude49",
+        "\ud83d\ude4a",
+        "\ud83d\udc12",
+        "\ud83c\udf4c"
+    ],
+    "weather": [
+        "\u2600\ufe0f",
+        "\ud83c\udf24\ufe0f",
+        "\u26c5",
+        "\ud83c\udf25\ufe0f",
+        "\u2601\ufe0f",
+        "\ud83c\udf27\ufe0f",
+        "\u26c8\ufe0f",
+        "\u26a1"
+    ],
+    "plant": [
+        "\ud83c\udf31",
+        "\ud83c\udf3f",
+        "\ud83e\udeb4",
+        "\ud83c\udf33",
+        "\ud83c\udf4e"
+    ],
+    "drink": [
+        "\ud83e\udd5b",
+        "\u2615",
+        "\ud83c\udf7a",
+        "\ud83e\udd42",
+        "\ud83e\udd43",
+        "\ud83e\udd74"
+    ],
+    "fight": [
+        "\ud83e\udd77",
+        "\ud83e\udd77 \u2694\ufe0f",
+        "\ud83e\udd77 \u2694\ufe0f \ud83e\udd3a",
+        "\ud83e\udd77 \ud83e\ude78",
+        "\u2620\ufe0f"
+    ],
+    "love": [
+        "\ud83d\udc40",
+        "\ud83d\ude33",
+        "\ud83e\udd70",
+        "\ud83d\udc8d",
+        "\ud83d\udc70\u200d\u2640\ufe0f",
+        "\ud83e\uddd1\u200d\ud83c\udf7c"
+    ],
+    "money": [
+        "\ud83e\ude99",
+        "\ud83d\udcb5",
+        "\ud83d\udcb8",
+        "\ud83d\udcb0",
+        "\ud83e\udd11"
+    ],
+    "gym": [
+        "\ud83e\uddcd",
+        "\ud83c\udfcb\ufe0f",
+        "\ud83c\udfcb\ufe0f\u200d\u2642\ufe0f",
+        "\ud83d\udcaa",
+        "\ud83e\udd8d"
+    ],
+    "sleep": [
+        "\ud83e\udd71",
+        "\ud83d\ude34",
+        "\ud83d\udca4",
+        "\ud83d\udecc",
+        "\ud83c\udf05"
+    ],
+    "prog1": [
+        "Loading 1 [>    ]",
+        "Loading 1 [>>   ]",
+        "Loading 1 [>>>  ]",
+        "Loading 1 [>>>> ]",
+        "Loading 1 [>>>>>] Done!"
+    ],
+    "prog2": [
+        "Loading 2 [>    ]",
+        "Loading 2 [>>   ]",
+        "Loading 2 [>>>  ]",
+        "Loading 2 [>>>> ]",
+        "Loading 2 [>>>>>] Done!"
+    ],
+    "prog3": [
+        "Loading 3 [>    ]",
+        "Loading 3 [>>   ]",
+        "Loading 3 [>>>  ]",
+        "Loading 3 [>>>> ]",
+        "Loading 3 [>>>>>] Done!"
+    ],
+    "prog4": [
+        "Loading 4 [>    ]",
+        "Loading 4 [>>   ]",
+        "Loading 4 [>>>  ]",
+        "Loading 4 [>>>> ]",
+        "Loading 4 [>>>>>] Done!"
+    ],
+    "prog5": [
+        "Loading 5 [>    ]",
+        "Loading 5 [>>   ]",
+        "Loading 5 [>>>  ]",
+        "Loading 5 [>>>> ]",
+        "Loading 5 [>>>>>] Done!"
+    ],
+    "prog6": [
+        "Loading 6 [>    ]",
+        "Loading 6 [>>   ]",
+        "Loading 6 [>>>  ]",
+        "Loading 6 [>>>> ]",
+        "Loading 6 [>>>>>] Done!"
+    ],
+    "prog7": [
+        "Loading 7 [>    ]",
+        "Loading 7 [>>   ]",
+        "Loading 7 [>>>  ]",
+        "Loading 7 [>>>> ]",
+        "Loading 7 [>>>>>] Done!"
+    ],
+    "prog8": [
+        "Loading 8 [>    ]",
+        "Loading 8 [>>   ]",
+        "Loading 8 [>>>  ]",
+        "Loading 8 [>>>> ]",
+        "Loading 8 [>>>>>] Done!"
+    ],
+    "prog9": [
+        "Loading 9 [>    ]",
+        "Loading 9 [>>   ]",
+        "Loading 9 [>>>  ]",
+        "Loading 9 [>>>> ]",
+        "Loading 9 [>>>>>] Done!"
+    ],
+    "prog10": [
+        "Loading 10 [>    ]",
+        "Loading 10 [>>   ]",
+        "Loading 10 [>>>  ]",
+        "Loading 10 [>>>> ]",
+        "Loading 10 [>>>>>] Done!"
+    ],
+    "prog11": [
+        "Loading 11 [>    ]",
+        "Loading 11 [>>   ]",
+        "Loading 11 [>>>  ]",
+        "Loading 11 [>>>> ]",
+        "Loading 11 [>>>>>] Done!"
+    ],
+    "prog12": [
+        "Loading 12 [>    ]",
+        "Loading 12 [>>   ]",
+        "Loading 12 [>>>  ]",
+        "Loading 12 [>>>> ]",
+        "Loading 12 [>>>>>] Done!"
+    ],
+    "prog13": [
+        "Loading 13 [>    ]",
+        "Loading 13 [>>   ]",
+        "Loading 13 [>>>  ]",
+        "Loading 13 [>>>> ]",
+        "Loading 13 [>>>>>] Done!"
+    ],
+    "prog14": [
+        "Loading 14 [>    ]",
+        "Loading 14 [>>   ]",
+        "Loading 14 [>>>  ]",
+        "Loading 14 [>>>> ]",
+        "Loading 14 [>>>>>] Done!"
+    ],
+    "prog15": [
+        "Loading 15 [>    ]",
+        "Loading 15 [>>   ]",
+        "Loading 15 [>>>  ]",
+        "Loading 15 [>>>> ]",
+        "Loading 15 [>>>>>] Done!"
+    ],
+    "prog16": [
+        "Loading 16 [>    ]",
+        "Loading 16 [>>   ]",
+        "Loading 16 [>>>  ]",
+        "Loading 16 [>>>> ]",
+        "Loading 16 [>>>>>] Done!"
+    ],
+    "prog17": [
+        "Loading 17 [>    ]",
+        "Loading 17 [>>   ]",
+        "Loading 17 [>>>  ]",
+        "Loading 17 [>>>> ]",
+        "Loading 17 [>>>>>] Done!"
+    ],
+    "prog18": [
+        "Loading 18 [>    ]",
+        "Loading 18 [>>   ]",
+        "Loading 18 [>>>  ]",
+        "Loading 18 [>>>> ]",
+        "Loading 18 [>>>>>] Done!"
+    ],
+    "prog19": [
+        "Loading 19 [>    ]",
+        "Loading 19 [>>   ]",
+        "Loading 19 [>>>  ]",
+        "Loading 19 [>>>> ]",
+        "Loading 19 [>>>>>] Done!"
+    ],
+    "prog20": [
+        "Loading 20 [>    ]",
+        "Loading 20 [>>   ]",
+        "Loading 20 [>>>  ]",
+        "Loading 20 [>>>> ]",
+        "Loading 20 [>>>>>] Done!"
+    ],
+    "prog21": [
+        "Loading 21 [>    ]",
+        "Loading 21 [>>   ]",
+        "Loading 21 [>>>  ]",
+        "Loading 21 [>>>> ]",
+        "Loading 21 [>>>>>] Done!"
+    ],
+    "prog22": [
+        "Loading 22 [>    ]",
+        "Loading 22 [>>   ]",
+        "Loading 22 [>>>  ]",
+        "Loading 22 [>>>> ]",
+        "Loading 22 [>>>>>] Done!"
+    ],
+    "prog23": [
+        "Loading 23 [>    ]",
+        "Loading 23 [>>   ]",
+        "Loading 23 [>>>  ]",
+        "Loading 23 [>>>> ]",
+        "Loading 23 [>>>>>] Done!"
+    ],
+    "prog24": [
+        "Loading 24 [>    ]",
+        "Loading 24 [>>   ]",
+        "Loading 24 [>>>  ]",
+        "Loading 24 [>>>> ]",
+        "Loading 24 [>>>>>] Done!"
+    ],
+    "prog25": [
+        "Loading 25 [>    ]",
+        "Loading 25 [>>   ]",
+        "Loading 25 [>>>  ]",
+        "Loading 25 [>>>> ]",
+        "Loading 25 [>>>>>] Done!"
+    ],
+    "spin1": [
+        "Spinning 1 \\",
+        "Spinning 1 |",
+        "Spinning 1 /",
+        "Spinning 1 -",
+        "Spinning 1 \\",
+        "Spinning 1 |",
+        "Spinning 1 /",
+        "Spinning 1 -"
+    ],
+    "spin2": [
+        "Spinning 2 \\",
+        "Spinning 2 |",
+        "Spinning 2 /",
+        "Spinning 2 -",
+        "Spinning 2 \\",
+        "Spinning 2 |",
+        "Spinning 2 /",
+        "Spinning 2 -"
+    ],
+    "spin3": [
+        "Spinning 3 \\",
+        "Spinning 3 |",
+        "Spinning 3 /",
+        "Spinning 3 -",
+        "Spinning 3 \\",
+        "Spinning 3 |",
+        "Spinning 3 /",
+        "Spinning 3 -"
+    ],
+    "spin4": [
+        "Spinning 4 \\",
+        "Spinning 4 |",
+        "Spinning 4 /",
+        "Spinning 4 -",
+        "Spinning 4 \\",
+        "Spinning 4 |",
+        "Spinning 4 /",
+        "Spinning 4 -"
+    ],
+    "spin5": [
+        "Spinning 5 \\",
+        "Spinning 5 |",
+        "Spinning 5 /",
+        "Spinning 5 -",
+        "Spinning 5 \\",
+        "Spinning 5 |",
+        "Spinning 5 /",
+        "Spinning 5 -"
+    ],
+    "spin6": [
+        "Spinning 6 \\",
+        "Spinning 6 |",
+        "Spinning 6 /",
+        "Spinning 6 -",
+        "Spinning 6 \\",
+        "Spinning 6 |",
+        "Spinning 6 /",
+        "Spinning 6 -"
+    ],
+    "spin7": [
+        "Spinning 7 \\",
+        "Spinning 7 |",
+        "Spinning 7 /",
+        "Spinning 7 -",
+        "Spinning 7 \\",
+        "Spinning 7 |",
+        "Spinning 7 /",
+        "Spinning 7 -"
+    ],
+    "spin8": [
+        "Spinning 8 \\",
+        "Spinning 8 |",
+        "Spinning 8 /",
+        "Spinning 8 -",
+        "Spinning 8 \\",
+        "Spinning 8 |",
+        "Spinning 8 /",
+        "Spinning 8 -"
+    ],
+    "spin9": [
+        "Spinning 9 \\",
+        "Spinning 9 |",
+        "Spinning 9 /",
+        "Spinning 9 -",
+        "Spinning 9 \\",
+        "Spinning 9 |",
+        "Spinning 9 /",
+        "Spinning 9 -"
+    ],
+    "spin10": [
+        "Spinning 10 \\",
+        "Spinning 10 |",
+        "Spinning 10 /",
+        "Spinning 10 -",
+        "Spinning 10 \\",
+        "Spinning 10 |",
+        "Spinning 10 /",
+        "Spinning 10 -"
+    ],
+    "spin11": [
+        "Spinning 11 \\",
+        "Spinning 11 |",
+        "Spinning 11 /",
+        "Spinning 11 -",
+        "Spinning 11 \\",
+        "Spinning 11 |",
+        "Spinning 11 /",
+        "Spinning 11 -"
+    ],
+    "spin12": [
+        "Spinning 12 \\",
+        "Spinning 12 |",
+        "Spinning 12 /",
+        "Spinning 12 -",
+        "Spinning 12 \\",
+        "Spinning 12 |",
+        "Spinning 12 /",
+        "Spinning 12 -"
+    ],
+    "spin13": [
+        "Spinning 13 \\",
+        "Spinning 13 |",
+        "Spinning 13 /",
+        "Spinning 13 -",
+        "Spinning 13 \\",
+        "Spinning 13 |",
+        "Spinning 13 /",
+        "Spinning 13 -"
+    ],
+    "spin14": [
+        "Spinning 14 \\",
+        "Spinning 14 |",
+        "Spinning 14 /",
+        "Spinning 14 -",
+        "Spinning 14 \\",
+        "Spinning 14 |",
+        "Spinning 14 /",
+        "Spinning 14 -"
+    ],
+    "spin15": [
+        "Spinning 15 \\",
+        "Spinning 15 |",
+        "Spinning 15 /",
+        "Spinning 15 -",
+        "Spinning 15 \\",
+        "Spinning 15 |",
+        "Spinning 15 /",
+        "Spinning 15 -"
+    ],
+    "spin16": [
+        "Spinning 16 \\",
+        "Spinning 16 |",
+        "Spinning 16 /",
+        "Spinning 16 -",
+        "Spinning 16 \\",
+        "Spinning 16 |",
+        "Spinning 16 /",
+        "Spinning 16 -"
+    ],
+    "spin17": [
+        "Spinning 17 \\",
+        "Spinning 17 |",
+        "Spinning 17 /",
+        "Spinning 17 -",
+        "Spinning 17 \\",
+        "Spinning 17 |",
+        "Spinning 17 /",
+        "Spinning 17 -"
+    ],
+    "spin18": [
+        "Spinning 18 \\",
+        "Spinning 18 |",
+        "Spinning 18 /",
+        "Spinning 18 -",
+        "Spinning 18 \\",
+        "Spinning 18 |",
+        "Spinning 18 /",
+        "Spinning 18 -"
+    ],
+    "spin19": [
+        "Spinning 19 \\",
+        "Spinning 19 |",
+        "Spinning 19 /",
+        "Spinning 19 -",
+        "Spinning 19 \\",
+        "Spinning 19 |",
+        "Spinning 19 /",
+        "Spinning 19 -"
+    ],
+    "spin20": [
+        "Spinning 20 \\",
+        "Spinning 20 |",
+        "Spinning 20 /",
+        "Spinning 20 -",
+        "Spinning 20 \\",
+        "Spinning 20 |",
+        "Spinning 20 /",
+        "Spinning 20 -"
+    ],
+    "spin21": [
+        "Spinning 21 \\",
+        "Spinning 21 |",
+        "Spinning 21 /",
+        "Spinning 21 -",
+        "Spinning 21 \\",
+        "Spinning 21 |",
+        "Spinning 21 /",
+        "Spinning 21 -"
+    ],
+    "spin22": [
+        "Spinning 22 \\",
+        "Spinning 22 |",
+        "Spinning 22 /",
+        "Spinning 22 -",
+        "Spinning 22 \\",
+        "Spinning 22 |",
+        "Spinning 22 /",
+        "Spinning 22 -"
+    ],
+    "spin23": [
+        "Spinning 23 \\",
+        "Spinning 23 |",
+        "Spinning 23 /",
+        "Spinning 23 -",
+        "Spinning 23 \\",
+        "Spinning 23 |",
+        "Spinning 23 /",
+        "Spinning 23 -"
+    ],
+    "spin24": [
+        "Spinning 24 \\",
+        "Spinning 24 |",
+        "Spinning 24 /",
+        "Spinning 24 -",
+        "Spinning 24 \\",
+        "Spinning 24 |",
+        "Spinning 24 /",
+        "Spinning 24 -"
+    ],
+    "spin25": [
+        "Spinning 25 \\",
+        "Spinning 25 |",
+        "Spinning 25 /",
+        "Spinning 25 -",
+        "Spinning 25 \\",
+        "Spinning 25 |",
+        "Spinning 25 /",
+        "Spinning 25 -"
+    ],
+    "bounce1": [
+        "Bounce 1 \u26bd",
+        "Bounce 1 \ud83c\udfc0",
+        "Bounce 1 \ud83c\udfc8",
+        "Bounce 1 \u26be",
+        "Bounce 1 \ud83c\udfbe"
+    ],
+    "bounce2": [
+        "Bounce 2 \u26bd",
+        "Bounce 2 \ud83c\udfc0",
+        "Bounce 2 \ud83c\udfc8",
+        "Bounce 2 \u26be",
+        "Bounce 2 \ud83c\udfbe"
+    ],
+    "bounce3": [
+        "Bounce 3 \u26bd",
+        "Bounce 3 \ud83c\udfc0",
+        "Bounce 3 \ud83c\udfc8",
+        "Bounce 3 \u26be",
+        "Bounce 3 \ud83c\udfbe"
+    ],
+    "bounce4": [
+        "Bounce 4 \u26bd",
+        "Bounce 4 \ud83c\udfc0",
+        "Bounce 4 \ud83c\udfc8",
+        "Bounce 4 \u26be",
+        "Bounce 4 \ud83c\udfbe"
+    ],
+    "bounce5": [
+        "Bounce 5 \u26bd",
+        "Bounce 5 \ud83c\udfc0",
+        "Bounce 5 \ud83c\udfc8",
+        "Bounce 5 \u26be",
+        "Bounce 5 \ud83c\udfbe"
+    ],
+    "bounce6": [
+        "Bounce 6 \u26bd",
+        "Bounce 6 \ud83c\udfc0",
+        "Bounce 6 \ud83c\udfc8",
+        "Bounce 6 \u26be",
+        "Bounce 6 \ud83c\udfbe"
+    ],
+    "bounce7": [
+        "Bounce 7 \u26bd",
+        "Bounce 7 \ud83c\udfc0",
+        "Bounce 7 \ud83c\udfc8",
+        "Bounce 7 \u26be",
+        "Bounce 7 \ud83c\udfbe"
+    ],
+    "bounce8": [
+        "Bounce 8 \u26bd",
+        "Bounce 8 \ud83c\udfc0",
+        "Bounce 8 \ud83c\udfc8",
+        "Bounce 8 \u26be",
+        "Bounce 8 \ud83c\udfbe"
+    ],
+    "bounce9": [
+        "Bounce 9 \u26bd",
+        "Bounce 9 \ud83c\udfc0",
+        "Bounce 9 \ud83c\udfc8",
+        "Bounce 9 \u26be",
+        "Bounce 9 \ud83c\udfbe"
+    ],
+    "bounce10": [
+        "Bounce 10 \u26bd",
+        "Bounce 10 \ud83c\udfc0",
+        "Bounce 10 \ud83c\udfc8",
+        "Bounce 10 \u26be",
+        "Bounce 10 \ud83c\udfbe"
+    ],
+    "bounce11": [
+        "Bounce 11 \u26bd",
+        "Bounce 11 \ud83c\udfc0",
+        "Bounce 11 \ud83c\udfc8",
+        "Bounce 11 \u26be",
+        "Bounce 11 \ud83c\udfbe"
+    ],
+    "bounce12": [
+        "Bounce 12 \u26bd",
+        "Bounce 12 \ud83c\udfc0",
+        "Bounce 12 \ud83c\udfc8",
+        "Bounce 12 \u26be",
+        "Bounce 12 \ud83c\udfbe"
+    ],
+    "bounce13": [
+        "Bounce 13 \u26bd",
+        "Bounce 13 \ud83c\udfc0",
+        "Bounce 13 \ud83c\udfc8",
+        "Bounce 13 \u26be",
+        "Bounce 13 \ud83c\udfbe"
+    ],
+    "bounce14": [
+        "Bounce 14 \u26bd",
+        "Bounce 14 \ud83c\udfc0",
+        "Bounce 14 \ud83c\udfc8",
+        "Bounce 14 \u26be",
+        "Bounce 14 \ud83c\udfbe"
+    ],
+    "bounce15": [
+        "Bounce 15 \u26bd",
+        "Bounce 15 \ud83c\udfc0",
+        "Bounce 15 \ud83c\udfc8",
+        "Bounce 15 \u26be",
+        "Bounce 15 \ud83c\udfbe"
+    ],
+    "bounce16": [
+        "Bounce 16 \u26bd",
+        "Bounce 16 \ud83c\udfc0",
+        "Bounce 16 \ud83c\udfc8",
+        "Bounce 16 \u26be",
+        "Bounce 16 \ud83c\udfbe"
+    ],
+    "bounce17": [
+        "Bounce 17 \u26bd",
+        "Bounce 17 \ud83c\udfc0",
+        "Bounce 17 \ud83c\udfc8",
+        "Bounce 17 \u26be",
+        "Bounce 17 \ud83c\udfbe"
+    ],
+    "bounce18": [
+        "Bounce 18 \u26bd",
+        "Bounce 18 \ud83c\udfc0",
+        "Bounce 18 \ud83c\udfc8",
+        "Bounce 18 \u26be",
+        "Bounce 18 \ud83c\udfbe"
+    ],
+    "bounce19": [
+        "Bounce 19 \u26bd",
+        "Bounce 19 \ud83c\udfc0",
+        "Bounce 19 \ud83c\udfc8",
+        "Bounce 19 \u26be",
+        "Bounce 19 \ud83c\udfbe"
+    ],
+    "bounce20": [
+        "Bounce 20 \u26bd",
+        "Bounce 20 \ud83c\udfc0",
+        "Bounce 20 \ud83c\udfc8",
+        "Bounce 20 \u26be",
+        "Bounce 20 \ud83c\udfbe"
+    ],
+    "bounce21": [
+        "Bounce 21 \u26bd",
+        "Bounce 21 \ud83c\udfc0",
+        "Bounce 21 \ud83c\udfc8",
+        "Bounce 21 \u26be",
+        "Bounce 21 \ud83c\udfbe"
+    ],
+    "bounce22": [
+        "Bounce 22 \u26bd",
+        "Bounce 22 \ud83c\udfc0",
+        "Bounce 22 \ud83c\udfc8",
+        "Bounce 22 \u26be",
+        "Bounce 22 \ud83c\udfbe"
+    ],
+    "bounce23": [
+        "Bounce 23 \u26bd",
+        "Bounce 23 \ud83c\udfc0",
+        "Bounce 23 \ud83c\udfc8",
+        "Bounce 23 \u26be",
+        "Bounce 23 \ud83c\udfbe"
+    ],
+    "bounce24": [
+        "Bounce 24 \u26bd",
+        "Bounce 24 \ud83c\udfc0",
+        "Bounce 24 \ud83c\udfc8",
+        "Bounce 24 \u26be",
+        "Bounce 24 \ud83c\udfbe"
+    ],
+    "bounce25": [
+        "Bounce 25 \u26bd",
+        "Bounce 25 \ud83c\udfc0",
+        "Bounce 25 \ud83c\udfc8",
+        "Bounce 25 \u26be",
+        "Bounce 25 \ud83c\udfbe"
+    ],
+    "wave1": [
+        "Wave 1 \u2582",
+        "Wave 1 \u2583",
+        "Wave 1 \u2584",
+        "Wave 1 \u2585",
+        "Wave 1 \u2586",
+        "Wave 1 \u2587",
+        "Wave 1 \u2588"
+    ],
+    "wave2": [
+        "Wave 2 \u2582",
+        "Wave 2 \u2583",
+        "Wave 2 \u2584",
+        "Wave 2 \u2585",
+        "Wave 2 \u2586",
+        "Wave 2 \u2587",
+        "Wave 2 \u2588"
+    ],
+    "wave3": [
+        "Wave 3 \u2582",
+        "Wave 3 \u2583",
+        "Wave 3 \u2584",
+        "Wave 3 \u2585",
+        "Wave 3 \u2586",
+        "Wave 3 \u2587",
+        "Wave 3 \u2588"
+    ],
+    "wave4": [
+        "Wave 4 \u2582",
+        "Wave 4 \u2583",
+        "Wave 4 \u2584",
+        "Wave 4 \u2585",
+        "Wave 4 \u2586",
+        "Wave 4 \u2587",
+        "Wave 4 \u2588"
+    ],
+    "wave5": [
+        "Wave 5 \u2582",
+        "Wave 5 \u2583",
+        "Wave 5 \u2584",
+        "Wave 5 \u2585",
+        "Wave 5 \u2586",
+        "Wave 5 \u2587",
+        "Wave 5 \u2588"
+    ],
+    "wave6": [
+        "Wave 6 \u2582",
+        "Wave 6 \u2583",
+        "Wave 6 \u2584",
+        "Wave 6 \u2585",
+        "Wave 6 \u2586",
+        "Wave 6 \u2587",
+        "Wave 6 \u2588"
+    ],
+    "wave7": [
+        "Wave 7 \u2582",
+        "Wave 7 \u2583",
+        "Wave 7 \u2584",
+        "Wave 7 \u2585",
+        "Wave 7 \u2586",
+        "Wave 7 \u2587",
+        "Wave 7 \u2588"
+    ],
+    "wave8": [
+        "Wave 8 \u2582",
+        "Wave 8 \u2583",
+        "Wave 8 \u2584",
+        "Wave 8 \u2585",
+        "Wave 8 \u2586",
+        "Wave 8 \u2587",
+        "Wave 8 \u2588"
+    ],
+    "wave9": [
+        "Wave 9 \u2582",
+        "Wave 9 \u2583",
+        "Wave 9 \u2584",
+        "Wave 9 \u2585",
+        "Wave 9 \u2586",
+        "Wave 9 \u2587",
+        "Wave 9 \u2588"
+    ],
+    "wave10": [
+        "Wave 10 \u2582",
+        "Wave 10 \u2583",
+        "Wave 10 \u2584",
+        "Wave 10 \u2585",
+        "Wave 10 \u2586",
+        "Wave 10 \u2587",
+        "Wave 10 \u2588"
+    ],
+    "wave11": [
+        "Wave 11 \u2582",
+        "Wave 11 \u2583",
+        "Wave 11 \u2584",
+        "Wave 11 \u2585",
+        "Wave 11 \u2586",
+        "Wave 11 \u2587",
+        "Wave 11 \u2588"
+    ],
+    "wave12": [
+        "Wave 12 \u2582",
+        "Wave 12 \u2583",
+        "Wave 12 \u2584",
+        "Wave 12 \u2585",
+        "Wave 12 \u2586",
+        "Wave 12 \u2587",
+        "Wave 12 \u2588"
+    ],
+    "wave13": [
+        "Wave 13 \u2582",
+        "Wave 13 \u2583",
+        "Wave 13 \u2584",
+        "Wave 13 \u2585",
+        "Wave 13 \u2586",
+        "Wave 13 \u2587",
+        "Wave 13 \u2588"
+    ],
+    "wave14": [
+        "Wave 14 \u2582",
+        "Wave 14 \u2583",
+        "Wave 14 \u2584",
+        "Wave 14 \u2585",
+        "Wave 14 \u2586",
+        "Wave 14 \u2587",
+        "Wave 14 \u2588"
+    ],
+    "wave15": [
+        "Wave 15 \u2582",
+        "Wave 15 \u2583",
+        "Wave 15 \u2584",
+        "Wave 15 \u2585",
+        "Wave 15 \u2586",
+        "Wave 15 \u2587",
+        "Wave 15 \u2588"
+    ]
+}
