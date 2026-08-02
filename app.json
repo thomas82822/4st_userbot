@@ -1,7 +1,7 @@
 {
   "name": "4ST Prime Core — Telegram Music Userbot",
   "description": "Telethon + Pyrogram/PyTgCalls Telegram music userbot with zero-disk streaming, Invidious/Piped/JioSaavn/SoundCloud failover, and live GitHub-backed persistence.",
-  "repository": "https://github.com/thomas91929/4st_userbot",
+  "repository": "https://github.com/thomas82822/4st_userbot",
   "keywords": ["telegram", "userbot", "music", "pyrogram", "telethon", "pytgcalls"],
   "stack": "heroku-22",
   "formation": {
