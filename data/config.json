@@ -53,7 +53,9 @@
         "telethon": {}
     },
     "HELP_REPORT_LINK": "https://t.me/+X1UQ5x4szFA3NDc1",
-    "BOT_USERS": [],
+    "BOT_USERS": [
+        8098146730
+    ],
     "BOT_GROUPS": [
         -1003685719486
     ],
