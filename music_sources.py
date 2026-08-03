@@ -3436,7 +3436,12 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
         # the event loop for up to 13×30=390 s per song.
         "socket_timeout": 15,              # technique #33
         "retries": 3,                      # technique #32
-        "extractor_retries": 5,            # retry yt info extraction on transient errors
+        # BUG FIX: extractor_retries 5→1 on cloud/Heroku IPs.
+        # "No video formats found!" is a SYSTEMATIC YouTube block, not a
+        # transient glitch — retrying the same client 5 times just wastes
+        # 10-15s per client before moving on. With 1 retry we fail fast
+        # and the outer client loop reaches tv_embedded/Piped much sooner.
+        "extractor_retries": 1,            # fail fast on datacenter IP blocks
         "fragment_retries": 5,             # technique #30
         "noplaylist": True,
         "concurrent_fragment_downloads": 1, # technique #34
@@ -3963,8 +3968,27 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # them — authenticated requests bypass bot-check on every client.
     _use_cookies_path = bool(_YTDLP_COOKIE_FILE)
     if _use_cookies_path:
-        logger("MUSIC_YT", "🍪 Cookies active — direct YouTube (skipping Piped/Invidious).")
-        # Fall through immediately to Phase 1 (cookies injected via _cookie_opts in _yt_base_opts)
+        logger("MUSIC_YT", "🍪 Cookies active — trying Piped first, then YouTube directly.")
+        # BUG FIX: Pehle sirf YouTube try karta tha aur Piped skip karta tha.
+        # Problem: Heroku ke USA IP pe YouTube "No video formats found!" deta hai
+        # chahe valid cookies hon — PO-token acquisition cloud IPs pe block hoti hai.
+        # Fix: Search queries ke liye Piped/Invidious PEHLE try karo (Phase 0.5).
+        # Piped extraction unke own servers pe hoti hai — Heroku IP block ka koi
+        # effect nahi. Ye fast hai aur success rate bahut zyada hai.
+        # Direct URLs (watch?v=) still go straight to Phase 1 (video_id needed).
+        if not is_direct:
+            _p05_piped_tmpl = out_tmpl + f"_p05piped_{ts}.%(ext)s"
+            result = await piped_search_download(query, _p05_piped_tmpl, logger)
+            if result:
+                logger("MUSIC_YT", f"✓ [piped-early/cookie-path] {result['title']!r}")
+                return result
+            _p05_inv_tmpl = out_tmpl + f"_p05inv_{ts}.%(ext)s"
+            result = await _yt_search_via_invidious(query, _p05_inv_tmpl, logger)
+            if result:
+                logger("MUSIC_YT", f"✓ [invidious-early/cookie-path] {result['title']!r}")
+                return result
+            logger("MUSIC_YT", "Piped/Invidious miss — falling through to direct YouTube Phase 1.")
+        # Fall through to Phase 1 (cookies injected via _cookie_opts in _yt_base_opts)
     else:
         # ─── Phase 0: Piped / Invidious search+download (no youtube.com hit) ──
         if not is_direct:
@@ -4017,20 +4041,23 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # DASH manifests. bgutil generates PO-tokens for cloud IPs so "web" works
     # from Heroku without fake player hacks.
     # Order: web → android_music (best for Hindi/regional) → android → ios
+    # BUG FIX: On Heroku/cloud IPs, YouTube blocks PO-token acquisition for
+    # DASH clients (web, android) even with valid cookies — returns "No video
+    # formats found!" for every attempt. The real fix is to try Tier-1
+    # no-PO-token clients FIRST. tv_embedded/android_vr/web_creator use
+    # player_skip=["webpage"] which bypasses the sign-in/bot-check gate
+    # entirely and works from any IP without PO-tokens or bgutil.
+    # Order: Tier-1 bypass first → DASH clients → extra bypasses.
     _cookie_preferred_clients = [
-        "web",            # Standard web + cookies + bgutil PO-token — best DASH quality
-        "android_music",  # YouTube Music client — excellent for Hindi/regional songs
-        "android",        # Android client — high reliability with authenticated cookies
-        "ios",            # iOS client — unique CDN fingerprint, good fallback
-        "mweb",           # Mobile web — lightweight, different server routing
-        # BUG FIX: Heroku/cloud IPs pe YouTube PO-token block karta hai chahe
-        # cookies set hon. Tier-1 clients player_skip=["webpage"] use karte hain
-        # jo bina PO-token ke kaam karte hain — bgutil ki zaroorat nahi.
-        # Ye fallback hain jab upar wale sab clients "No video formats found" den.
-        "tv_embedded",    # Embedded TV player — no bot-check, BEST Heroku bypass
-        "android_vr",     # VR client — different token path, no check
-        "web_creator",    # Creator Studio — skips sign-in gate
-        "android_testsuite",  # Test build — relaxed restrictions
+        "tv_embedded",        # ★ BEST for Heroku — no bot-check, no PO-token needed
+        "android_vr",         # VR client — no sign-in gate, different token path
+        "web_creator",        # Creator Studio — skips sign-in gate completely
+        "android_testsuite",  # Test build — relaxed restrictions, no PO-token
+        "web",                # Standard web + cookies + bgutil PO-token
+        "android_music",      # YouTube Music — excellent for Hindi/regional songs
+        "android",            # Android client — high reliability with cookies
+        "ios",                # iOS client — unique CDN fingerprint
+        "mweb",               # Mobile web — lightweight, different server routing
     ]
     p1_clients = _cookie_preferred_clients if _YTDLP_COOKIE_FILE else _YT_CLIENTS
 

@@ -919,6 +919,12 @@ class ChatMusicState:
         self.lock            = asyncio.Lock()
         self.last_advance_ts = 0.0    # debounces duplicate stream_end fires
         self.ctrl_msg_id     = None   # asstbot control-button message id
+        # BUG FIX: silence-frame transition guard — True while the 0.5s
+        # silence primer is being played before a real stream swap (.skip).
+        # _on_stream_end MUST ignore the stream_end that fires when the
+        # silence frame finishes, otherwise it calls music_play_next →
+        # leave_call() and the VC drops every time a song is skipped/played.
+        self.transitioning   = False
 
 music_states = {}
 
@@ -2294,6 +2300,12 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
         # already-dead PID → ProcessLookupError.  No existing stream means
         # no need to prime — the first real play() settles fine on its own.
         if mstate.is_playing:
+            # BUG FIX: set transitioning=True BEFORE playing the silence frame
+            # so _on_stream_end ignores the stream_end that fires when the
+            # silence frame finishes (0.5s). Without this guard, stream_end
+            # calls music_play_next → empty queue → leave_call() → VC drops
+            # every time a new song is played or skipped.
+            mstate.transitioning = True
             try:
                 await tgcalls.play(chat_id, MediaStream(
                     music_sources.SILENCE_FRAME_PATH,
@@ -2302,6 +2314,8 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
                 await asyncio.sleep(0.4)
             except Exception:
                 pass  # best-effort priming — never block real playback
+            finally:
+                mstate.transitioning = False
 
         # play() also works if a stream is already active for this chat —
         # it swaps the running stream in place, which is what .skip relies on.
@@ -2513,6 +2527,15 @@ def register_stream_end_handler(user_id: int):
         try:
             await asyncio.sleep(0.5)
             chat_id = update.chat_id
+            # BUG FIX: ignore stream_end events that fire when the silence
+            # primer finishes during a stream swap (.skip / .play while
+            # already playing). If we don't guard here, music_play_next
+            # finds an empty queue and calls leave_call() — dropping the VC
+            # every time a song is played. mstate.transitioning is set True
+            # in music_play_track only for the ~0.5s the silence frame plays.
+            mstate = get_music_state(chat_id)
+            if mstate.transitioning:
+                return
             ok = await music_play_next(chat_id, client=userbot, session_user_id=user_id)
             if ok:
                 # Track auto-advanced (queue/loop) — refresh the Now Playing
