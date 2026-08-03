@@ -5,7 +5,7 @@
     "OWNER_ID": 8098146730,
     "START_MEDIA_PATH": null,
     "CUSTOM_STARTUP_MSG": "\ud83d\udfe2 <b>4ST PRIME CORE ACTIVE</b>\nPerformance: <code>MAX_SPEED</code>",
-    "MASTER_SYNC": false,
+    "MASTER_SYNC": true,
     "SUDO_LEVEL_1": [],
     "SUDO_LEVEL_2": [],
     "DEFAULT_SPEEDS": {
