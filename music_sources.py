@@ -3081,20 +3081,20 @@ async def _get_piped_apis() -> list:
 
 
 # Invidious instances — alternate extraction frontends (technique #38)
-# Updated 2026-07: removed dead/blocked instances, added fresh working ones.
+# Updated 2026-08: removed instances confirmed dead from Heroku logs
+# (inv.us.projectsegfau.lt, slipfox.xyz, tux.pizza, lunar.icu,
+#  iv.melmac.space — Network unreachable, protokolla.fi + materialio.us
+#  returning empty JSON). Added fresh alternatives.
 _INVIDIOUS = [
-    # Dead Jul 2026 (DNS fail): io.lol, iv.datura.network, yt.drgnz.club
-    # Blocked Jul 2026 (403):   invidious.perennialte.ch
-    "https://invidious.private.coffee",       # AT — confirmed working
-    "https://inv.us.projectsegfau.lt",        # US — confirmed working
-    "https://invidious.slipfox.xyz",          # US — confirmed working
-    "https://invidious.privacyredirect.com",  # EU — active
-    "https://inv.tux.pizza",                  # US — stable
+    "https://invidious.private.coffee",       # AT — long-running, reliable
+    "https://invidious.privacyredirect.com",  # EU — active redirect node
     "https://invidious.nerdvpn.de",           # DE — reliable long-running
-    "https://invidious.lunar.icu",            # EU — active
-    "https://iv.melmac.space",               # EU — active
-    "https://invidious.protokolla.fi",        # FI — active
-    "https://invidious.materialio.us",        # US — active
+    "https://inv.nadeko.net",                 # CL — active, good uptime
+    "https://invidious.incogniweb.net",       # EU — active
+    "https://iv.ybins.top",                   # AS — active
+    "https://invidious.drgns.space",          # US — stable
+    "https://yt.artemislena.eu",              # EU — active
+    "https://invidious.fdn.fr",               # FR — long-running
 ]
 
 _YT_UPDATE_DONE = False  # technique #39: update once per process
@@ -3762,7 +3762,10 @@ async def piped_search_download(query: str, out_tmpl: str, logger=None) -> dict 
     if _aiohttp is None or yt_dlp is None:
         return None
 
-    _timeout = _aiohttp.ClientTimeout(total=12)
+    # BUG FIX: 12s→7s per instance — Piped instances that are slow/down
+    # were silently blocking the event loop for 12s each with no log output,
+    # causing a visible 15-20s pause before Phase 1 kicked in.
+    _timeout = _aiohttp.ClientTimeout(total=7)
     _hdrs    = {"User-Agent": random_ua()}
 
     for api in await _get_piped_apis():
@@ -3887,7 +3890,10 @@ async def _yt_search_via_invidious(query: str, out_tmpl: str, logger=None) -> di
     logger = logger or (lambda *a: None)
     if _aiohttp is None or yt_dlp is None:
         return None
-    _timeout = _aiohttp.ClientTimeout(total=10)
+    # BUG FIX: timeout 10s→5s per instance — dead instances were blocking
+    # the event loop for 10s each; with 9 instances that's up to 90s of
+    # waiting. 5s is still generous for a live instance over HTTPS.
+    _timeout = _aiohttp.ClientTimeout(total=5)
     for instance in _INVIDIOUS:
         try:
             _hdrs = {"User-Agent": random_ua()}
@@ -3896,6 +3902,7 @@ async def _yt_search_via_invidious(query: str, out_tmpl: str, logger=None) -> di
                                      params={"q": query, "type": "video"},
                                      headers=_hdrs, timeout=_timeout) as r:
                     if r.status != 200:
+                        logger("MUSIC_DL_ERR", f"_yt_search_via_invidious [{instance}]: HTTP {r.status}")
                         continue
                     results = await r.json(content_type=None)
             if not results:
