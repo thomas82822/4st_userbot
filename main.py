@@ -1991,19 +1991,26 @@ async def _search_and_download_audio_core(query: str):
             bot_logger("MUSIC_DL_ERR", f"[extra] {name}: {e}")
             return None
 
-    # ── all sources, ordered by stated priority; low-priority ones get a
-    #    small head-start penalty so ties lean toward the preferred source
-    #    without turning this into a strict, slow waterfall ─────────────
-    # Sources: YouTube (primary, with cookies) + Piped (backup via Piped frontend).
-    # All other sources removed — YouTube with cookies is the sole music source.
+    # ── all sources, ordered by stated priority ─────────────────────────
+    # Heroku USA IP pe YouTube (koi bhi client) block hai, isliye:
+    # - JioSaavn: PRIMARY source — Heroku pe perfect kaam karta hai, Hindi/
+    #   Bollywood songs ke liye best coverage, apna CDN use karta hai.
+    # - Piped: PARALLEL — Piped proxy ke through download (googlevideo.com
+    #   directly nahi — Piped apne servers se serve karta hai).
+    # - YouTube: still tried — agar bgutil/cookies work karein kabhi.
+    _SOURCE_TIMEOUT = 60  # Full song download ke liye 60s chahiye (JioSaavn/Piped)
     sources = [
-        # YouTube: primary — authenticated via cookies, full DASH manifest.
-        ("youtube", music_sources.youtube_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_yt2.%(ext)s"),
+        # JioSaavn: BEST for Heroku — India ka CDN, koi block nahi, full songs.
+        ("jiosaavn", music_sources.jiosaavn_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_js.%(ext)s"),
             bot_logger), 0.0),
-        # Piped: backup — extraction on Piped servers, bypasses datacenter IP blocks.
+        # Piped: parallel — requests+ffmpeg (Piped proxy, not googlevideo.com).
         ("piped", music_sources.piped_search_download(
             query, os.path.join(MUSIC_CACHE, f"audio_{ets}_pd.%(ext)s"),
+            bot_logger), 0.0),
+        # YouTube: still tried — works if cookies+bgutil active.
+        ("youtube", music_sources.youtube_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_yt2.%(ext)s"),
             bot_logger), 0.0),
     ]
 
@@ -2430,14 +2437,14 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
                                               _retry=True, _attempt=3)
             # Fall through to reconnect strategy
 
-        # ── Strategy 4: Leave stale call + reconnect ──────────────────────
+        # ── Strategy 4: Reconnect retry — NO leave_call ─────────────────────
+        # BUG FIX: Pehle yahan leave_call() call hoti thi jo naya bana hua
+        # VC sab ke liye band kar deta tha, phir dobara start hota tha.
+        # Ab sirf retry karo bina VC chhode — agar VC already chal raha hai
+        # to directly join karega, band nahi karega.
         if _attempt < 3 and _retry:
-            bot_logger("MUSIC_PLAY_ERR", "Strategy 4: leaving call + reconnect retry.")
-            try:
-                await tgcalls.leave_call(chat_id)
-            except Exception:
-                pass
-            await asyncio.sleep(1.5)
+            bot_logger("MUSIC_PLAY_ERR", "Strategy 4: retry without leaving VC.")
+            await asyncio.sleep(1.0)
             return await music_play_track(chat_id, track, session_user_id,
                                           _retry=False, _attempt=_attempt + 1)
 

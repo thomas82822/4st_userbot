@@ -3649,24 +3649,36 @@ async def _yt_try_piped(video_id: str, out_tmpl: str, logger=None) -> dict | Non
             title      = data.get("title", video_id)
             duration   = int(data.get("duration") or 0)
 
-            # Download the stream URL with yt-dlp generic downloader
+            # BUG FIX: requests+ffmpeg se download karo (yt-dlp nahi)
+            # Piped stream URL googlevideo.com proxy hai — direct requests
+            # se download Heroku pe kaam karta hai.
+            raw_path = out_tmpl.replace("%(ext)s", "piped_raw")
             mp3_path = out_tmpl.replace("%(ext)s", "mp3")
-            opts = {
-                "quiet": True, "no_warnings": True,
-                "format": "bestaudio/best",
-                "outtmpl": out_tmpl,
-                "postprocessors": [{"key": "FFmpegExtractAudio",
-                                    "preferredcodec": "mp3", "preferredquality": "256"}],
-                "external_downloader_args": {"ffmpeg_i": ["-reconnect", "1",
-                    "-reconnect_streamed", "1", "-reconnect_delay_max", "5"]},
-            }
-            def _run(u=stream_url):
+            def _run_raw(u=stream_url):
                 try:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        ydl.extract_info(u, download=True)
+                    with requests.get(u, stream=True, timeout=90,
+                                      headers={"User-Agent": random_ua()},
+                                      allow_redirects=True) as r:
+                        r.raise_for_status()
+                        with open(raw_path, "wb") as fh:
+                            for chunk in r.iter_content(chunk_size=1 << 16):
+                                if chunk: fh.write(chunk)
                 except Exception:
                     pass
-            await asyncio.to_thread(_run)
+            await asyncio.to_thread(_run_raw)
+            if not os.path.exists(raw_path) or os.path.getsize(raw_path) < 4096:
+                continue
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y", "-i", raw_path,
+                    "-vn", "-ar", "44100", "-ac", "2", "-b:a", "320k", mp3_path,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.wait()
+            except Exception:
+                pass
+            with contextlib.suppress(Exception):
+                os.remove(raw_path)
             if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 4096:
                 logger("MUSIC_DL", f"Piped [{api}] ✓ {title!r}")
                 return {"title": title, "file_path": mp3_path,
@@ -3812,50 +3824,49 @@ async def piped_search_download(query: str, out_tmpl: str, logger=None) -> dict 
             a_streams.sort(key=lambda s: s.get("bitrate", 0), reverse=True)
             stream_url = a_streams[0]["url"]
 
-            # ── Step 3: Download via yt-dlp ─────────────────────────────
+            # ── Step 3: Download via requests+ffmpeg (yt-dlp nahi) ──────
+            # BUG FIX: yt-dlp Piped stream URL ko YouTube extractor se handle
+            # karta tha aur googlevideo.com hit karta tha → Heroku pe block.
+            # Ab: requests se seedha Piped proxy URL download karo (Piped apne
+            # servers se serve karta hai), ffmpeg se mp3 banao. JioSaavn wali
+            # same approach — Heroku pe 100% kaam karti hai.
+            raw_path = out_tmpl.replace("%(ext)s", "piped_raw")
             mp3_path = out_tmpl.replace("%(ext)s", "mp3")
-            dl_opts  = {
-                "quiet":             True,
-                "no_warnings":       True,
-                "nocheckcertificate": True,
-                "format":            "bestaudio/best",
-                "outtmpl":           out_tmpl,
-                "socket_timeout":    20,
-                "postprocessors": [{
-                    "key":              "FFmpegExtractAudio",
-                    "preferredcodec":   "mp3",
-                    "preferredquality": "256",
-                }],
-                "external_downloader_args": {
-                    "ffmpeg_i": ["-reconnect", "1",
-                                 "-reconnect_streamed", "1",
-                                 "-reconnect_delay_max", "5"]
-                },
-            }
 
-            def _dl(url=stream_url, opts=dl_opts):
+            def _dl_raw(url=stream_url):
                 try:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        ydl.extract_info(url, download=True)
+                    with requests.get(url, stream=True, timeout=90,
+                                      headers={"User-Agent": random_ua()},
+                                      allow_redirects=True) as r:
+                        r.raise_for_status()
+                        with open(raw_path, "wb") as fh:
+                            for chunk in r.iter_content(chunk_size=1 << 16):
+                                if chunk:
+                                    fh.write(chunk)
                 except Exception:
                     pass
 
-            await asyncio.to_thread(_dl)
+            await asyncio.to_thread(_dl_raw)
+            if not os.path.exists(raw_path) or os.path.getsize(raw_path) < 4096:
+                continue  # is instance ne kaam nahi kiya, agli try karo
 
-            # MP3 (with FFmpeg) or raw audio (without FFmpeg — both playable)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y", "-i", raw_path,
+                    "-vn", "-ar", "44100", "-ac", "2", "-b:a", "320k", mp3_path,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.wait()
+            except Exception:
+                pass
+            with contextlib.suppress(Exception):
+                os.remove(raw_path)
+
             if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 4096:
                 logger("MUSIC_DL", f"Piped ✓ [{api}] '{title[:50]}'")
                 return {"title": title, "file_path": mp3_path,
                         "duration": duration, "thumbnail": thumbnail,
                         "source": "piped"}
-
-            for raw_ext in ("m4a", "webm", "opus", "ogg", "aac"):
-                raw = out_tmpl.replace("%(ext)s", raw_ext)
-                if os.path.exists(raw) and os.path.getsize(raw) > 4096:
-                    logger("MUSIC_DL", f"Piped raw/{raw_ext} ✓ [{api}] '{title[:50]}'")
-                    return {"title": title, "file_path": raw,
-                            "duration": duration, "thumbnail": thumbnail,
-                            "source": "piped"}
 
         except Exception as exc:
             logger("MUSIC_DL_ERR", f"piped_search [{api}]: {exc}")
@@ -4012,6 +4023,14 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
         "android",        # Android client — high reliability with authenticated cookies
         "ios",            # iOS client — unique CDN fingerprint, good fallback
         "mweb",           # Mobile web — lightweight, different server routing
+        # BUG FIX: Heroku/cloud IPs pe YouTube PO-token block karta hai chahe
+        # cookies set hon. Tier-1 clients player_skip=["webpage"] use karte hain
+        # jo bina PO-token ke kaam karte hain — bgutil ki zaroorat nahi.
+        # Ye fallback hain jab upar wale sab clients "No video formats found" den.
+        "tv_embedded",    # Embedded TV player — no bot-check, BEST Heroku bypass
+        "android_vr",     # VR client — different token path, no check
+        "web_creator",    # Creator Studio — skips sign-in gate
+        "android_testsuite",  # Test build — relaxed restrictions
     ]
     p1_clients = _cookie_preferred_clients if _YTDLP_COOKIE_FILE else _YT_CLIENTS
 
