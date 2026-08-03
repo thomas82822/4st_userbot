@@ -938,6 +938,7 @@ except ValueError as _e:
 asstbot          = TelegramClient(StringSession(cfg.get("BOT_SESSION", "")), cfg["API_ID"], cfg["API_HASH"])
 extra_clients    = []
 background_tasks = set()
+_play_in_progress: set[int] = set()   # chats currently processing a .play download — dedup guard for multi-account setups
 
 # ── Force HTML parse mode on both clients ────────────────────────────────
 # Telethon's TelegramClient defaults to MARKDOWN parse mode, not HTML.
@@ -4310,13 +4311,25 @@ def create_event_handler(client):
                 _vc_prejoin_task = asyncio.create_task(_prejoin_vc_bg())
             # ─────────────────────────────────────────────────────────────
 
+            # ── Multi-account dedup guard ─────────────────────────────────
+            # When extra sessions (SAVED_STRINGS) are active, ALL accounts
+            # receive and process the same .play message simultaneously.
+            # _play_in_progress ensures only the FIRST account runs the
+            # expensive search+download; others silently skip.
+            if chat_id in _play_in_progress:
+                return
+            _play_in_progress.add(chat_id)
+
             track = None
-            if event.reply_to_msg_id:
-                track = await download_tagged_media(event)
-                if track:
-                    track.is_video = False
-            if not track and query:
-                track = await search_and_download_audio(query)
+            try:
+                if event.reply_to_msg_id:
+                    track = await download_tagged_media(event)
+                    if track:
+                        track.is_video = False
+                if not track and query:
+                    track = await search_and_download_audio(query)
+            finally:
+                _play_in_progress.discard(chat_id)
 
             if not track:
                 if _vc_prejoin_task and not _vc_prejoin_task.done():
