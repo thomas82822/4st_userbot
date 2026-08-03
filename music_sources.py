@@ -3197,10 +3197,166 @@ if _BGUTIL_ACTIVE:
 else:
     import logging as _logging
     _logging.getLogger("music_sources").warning(
-        "⚠️ bgutil not found at %s — YouTube may fail on cloud IPs. "
-        "Redeploy on Heroku to trigger bin/post_compile and install it.",
+        "⚠️ bgutil not found at %s — will attempt runtime install on first music request.",
         _BGUTIL_SERVER_HOME,
     )
+
+
+def _find_deno() -> str | None:
+    """Find Deno binary — check vendor path (post_compile) then system PATH."""
+    _vendor_deno = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "vendor", "deno", "bin", "deno",
+    )
+    if os.path.isfile(_vendor_deno) and os.access(_vendor_deno, os.X_OK):
+        return _vendor_deno
+    import shutil as _sh2
+    return _sh2.which("deno")
+
+
+# ── curl-cffi TLS impersonation (jugad #42) ──────────────────────────────────
+# yt-dlp[default,curl-cffi] is in requirements.txt.
+# ImpersonateTarget makes requests look like real Chrome at the TLS layer,
+# bypassing Heroku/cloud-IP fingerprinting that YouTube/CDN uses to detect bots.
+try:
+    from yt_dlp.networking.impersonate import ImpersonateTarget as _ImpersonateTarget
+    _CURL_CFFI_AVAILABLE = True
+except Exception:
+    _ImpersonateTarget = None
+    _CURL_CFFI_AVAILABLE = False
+
+
+def _get_impersonate_opt() -> dict:
+    """Return {"impersonate": ImpersonateTarget} if curl-cffi is available."""
+    if not _CURL_CFFI_AVAILABLE:
+        return {}
+    # Chrome 131, Windows 10 — realistic, common fingerprint
+    return {"impersonate": _ImpersonateTarget("chrome", None, "windows", None)}
+
+
+# ── Runtime bgutil installer (jugad #43) ─────────────────────────────────────
+# bgutil provides Proof-of-Origin tokens that YouTube requires from cloud IPs.
+# bin/post_compile installs it at Heroku build time; this function installs it
+# at runtime on the first music request so any running dyno gets it immediately
+# without a full redeploy.
+_BGUTIL_INSTALL_LOCK = asyncio.Lock()
+_BGUTIL_INSTALL_DONE = False
+
+
+async def _ensure_bgutil_runtime(logger=None) -> None:
+    """One-shot runtime bgutil installer — idempotent and async-safe."""
+    global _BGUTIL_ACTIVE, _BGUTIL_INSTALL_DONE
+    if _BGUTIL_ACTIVE or _BGUTIL_INSTALL_DONE:
+        return
+    async with _BGUTIL_INSTALL_LOCK:
+        if _BGUTIL_ACTIVE or _BGUTIL_INSTALL_DONE:
+            return
+        _BGUTIL_INSTALL_DONE = True  # prevent retries on failure
+
+        import logging as _log2
+        _log = _log2.getLogger("music_sources")
+        _info = logger or (lambda tag, msg: _log.info("[%s] %s", tag, msg))
+
+        BGUTIL_VERSION = "1.3.1"
+        BGUTIL_URL = (
+            f"https://github.com/Brainicism/bgutil-ytdlp-pot-provider"
+            f"/archive/refs/tags/{BGUTIL_VERSION}.zip"
+        )
+
+        try:
+            import zipfile
+            import tempfile
+            import urllib.request as _urlreq
+
+            _info("BGUTIL", f"⬇️ Installing bgutil v{BGUTIL_VERSION} (IP bypass for YouTube)...")
+
+            tmp_zip = os.path.join(tempfile.gettempdir(), "bgutil_dl.zip")
+            tmp_ext = os.path.join(tempfile.gettempdir(), "bgutil_ext")
+
+            # Download
+            def _dl():
+                _urlreq.urlretrieve(BGUTIL_URL, tmp_zip)
+            await asyncio.to_thread(_dl)
+
+            # Extract
+            def _unzip():
+                import shutil as _sh3
+                if os.path.exists(tmp_ext):
+                    _sh3.rmtree(tmp_ext)
+                os.makedirs(tmp_ext, exist_ok=True)
+                with zipfile.ZipFile(tmp_zip) as zf:
+                    zf.extractall(tmp_ext)
+            await asyncio.to_thread(_unzip)
+
+            # Find extracted root dir
+            extracted_root = None
+            for _item in os.listdir(tmp_ext):
+                _full = os.path.join(tmp_ext, _item)
+                if os.path.isdir(_full):
+                    extracted_root = _full
+                    break
+            if not extracted_root:
+                raise RuntimeError("bgutil: no directory in extracted archive")
+
+            plugin_src = os.path.join(extracted_root, "plugin")
+            server_src = os.path.join(extracted_root, "server")
+            if not os.path.isdir(plugin_src) or not os.path.isdir(server_src):
+                raise RuntimeError("bgutil: unexpected archive layout")
+
+            # Copy to vendor/
+            import shutil as _sh4
+            bgutil_home = _BGUTIL_SERVER_HOME
+            plugin_dst = os.path.join(bgutil_home, "plugin")
+            server_dst = os.path.join(bgutil_home, "server")
+            os.makedirs(bgutil_home, exist_ok=True)
+            if os.path.exists(plugin_dst):
+                _sh4.rmtree(plugin_dst)
+            if os.path.exists(server_dst):
+                _sh4.rmtree(server_dst)
+            await asyncio.to_thread(_sh4.copytree, plugin_src, plugin_dst)
+            await asyncio.to_thread(_sh4.copytree, server_src, server_dst)
+
+            # Register plugin with yt-dlp
+            if plugin_dst not in _sys_top.path:
+                _sys_top.path.insert(0, plugin_dst)
+
+            # Find Deno
+            deno = _find_deno()
+            if not deno:
+                _info("BGUTIL_WARN", "⚠️ Deno not found — bgutil downloaded but provider inactive. Songs will still play via direct cookie path.")
+                return
+
+            # deno install
+            def _deno_install():
+                return subprocess.run(
+                    [deno, "install", "--allow-scripts=npm:canvas", "--frozen"],
+                    cwd=server_dst, capture_output=True, timeout=120,
+                )
+            res = await asyncio.to_thread(_deno_install)
+            if res.returncode != 0:
+                _info("BGUTIL_WARN", f"⚠️ bgutil deno install error: {res.stderr.decode()[:300]}")
+                return
+
+            # Verify
+            gen_once = os.path.join(server_dst, "src", "generate_once.ts")
+            if os.path.isfile(gen_once):
+                _BGUTIL_ACTIVE = True
+                _info("BGUTIL", "✅ bgutil runtime install complete — PO-token provider active!")
+            else:
+                _info("BGUTIL_WARN", "⚠️ bgutil: generate_once.ts missing after install")
+
+            # Cleanup
+            def _cleanup():
+                import shutil as _sh5
+                _sh5.rmtree(tmp_ext, ignore_errors=True)
+                try:
+                    os.unlink(tmp_zip)
+                except Exception:
+                    pass
+            await asyncio.to_thread(_cleanup)
+
+        except Exception as _be:
+            _info("BGUTIL_ERR", f"⚠️ bgutil runtime install failed: {_be}. Continuing with cookie-only path.")
 
 
 def _build_extractor_args(yt_args: dict) -> dict:
@@ -3312,8 +3468,13 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
                 "-analyzeduration", "0",
             ]
         },
+        # curl-cffi TLS impersonation (jugad #42) — makes all HTTP(S) requests
+        # from yt-dlp look like real Chrome at the TLS/JA3 fingerprint level.
+        # YouTube and googlevideo CDN use TLS fingerprinting to detect cloud IPs;
+        # impersonating Chrome bypasses this check without needing a proxy.
+        **_get_impersonate_opt(),
         # Innertube client + bot-check bypass + bgutil PO-token provider
-        # bgutil is installed by bin/post_compile at Heroku build time.
+        # bgutil is auto-installed at runtime on first use (_ensure_bgutil_runtime).
         # It generates Proof-of-Origin tokens that YouTube now requires for
         # cloud-IP requests — without it most clients return "No video formats".
         "extractor_args": _build_extractor_args(ext_args_yt),
@@ -3738,6 +3899,12 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     except Exception:
         pass
 
+    # Kick off bgutil runtime install in the background (no-op if already done).
+    # First song request triggers the one-time setup; subsequent calls return
+    # immediately because _BGUTIL_INSTALL_DONE is True after the first call.
+    if not _BGUTIL_ACTIVE and not _BGUTIL_INSTALL_DONE:
+        asyncio.create_task(_ensure_bgutil_runtime(logger))
+
     is_direct = bool(_URL_RE.match(query.strip()))
     video_id  = _yt_extract_video_id(query) if is_direct else None
     norm_q    = _yt_normalize_query(query)   # technique #18
@@ -3801,19 +3968,13 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # audio-only streams so 'bestaudio' resolves correctly.
     # Without cookies, use the full _YT_CLIENTS list (tv_embedded first for
     # bot-check bypass via player_skip=["webpage"]).
+    # COOKIE PATH: direct web client only — no client chain juggling.
+    # With valid YTDLP_COOKIES + curl-cffi TLS impersonation (jugad #42),
+    # the standard web client authenticates via SAPISID/cookie hash and
+    # returns the full DASH manifest with audio-only streams.
+    # bgutil (_ensure_bgutil_runtime) handles PO-tokens for cloud IPs.
     _cookie_preferred_clients = [
-        # Tier-1 clients first — bypass PO-token entirely on cloud IPs.
-        # These work on Heroku/Railway even WITHOUT bgutil, because
-        # player_skip=["webpage"] skips the entire PO-token acquisition path.
-        "tv_embedded",    # 1 — Embedded TV player. No bot-check. Most reliable.
-        "android_vr",     # 2 — VR client. No PO-token. Different token path.
-        "web_creator",    # 3 — Creator Studio client. Skips sign-in gate.
-        # Cookie-enhanced clients — need full manifest but get blocked by
-        # cloud IP bot-check without bgutil. Try these after Tier-1 succeed.
-        "android_music",  # YouTube Music — great for songs / Hindi content
-        "ios",            # iOS innertube
-        "mweb",           # mobile web fallback
-        "web",            # standard web with cookies
+        "web",   # Standard web with cookies — full DASH manifest, best audio quality
     ]
     p1_clients = _cookie_preferred_clients if _YTDLP_COOKIE_FILE else _YT_CLIENTS
 
