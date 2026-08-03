@@ -7211,7 +7211,7 @@ async def main():
     _reconnect_delay = 15  # seconds to wait before reconnecting
     _AUTO_REBOOT = os.environ.get("AUTO_REBOOT", "0").strip() == "1"
 
-    while _AUTO_REBOOT:
+    while True:
         gather_tasks = []
         if asstbot_started:
             gather_tasks.append(asstbot.run_until_disconnected())
@@ -7247,6 +7247,10 @@ async def main():
         gather_tasks.extend(alive_bg)
 
         await asyncio.gather(*gather_tasks, return_exceptions=True)
+
+        if not _AUTO_REBOOT:
+            bot_logger("SYSTEM", "All connections dropped. AUTO_REBOOT is off — exiting.")
+            break
 
         bot_logger("SYSTEM",
             f"All connections dropped. Reconnecting in {_reconnect_delay}s...")
