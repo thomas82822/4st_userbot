@@ -3916,11 +3916,17 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     except Exception:
         pass
 
-    # Kick off bgutil runtime install in the background (no-op if already done).
-    # First song request triggers the one-time setup; subsequent calls return
-    # immediately because _BGUTIL_INSTALL_DONE is True after the first call.
+    # bgutil PO-token install — await when cookies are active so the PO-token
+    # provider is ready before the first "web" client request hits YouTube.
+    # Without bgutil, authenticated "web" requests from Heroku/cloud IPs get
+    # "No video formats found" because YouTube requires PO-tokens from datacenter IPs.
+    # No-cookie path: fire-and-forget (tv_embedded doesn't need PO-tokens).
     if not _BGUTIL_ACTIVE and not _BGUTIL_INSTALL_DONE:
-        asyncio.create_task(_ensure_bgutil_runtime(logger))
+        if _YTDLP_COOKIE_FILE:
+            # Cookies active → wait for bgutil so PO-token is ready immediately
+            await _ensure_bgutil_runtime(logger)
+        else:
+            asyncio.create_task(_ensure_bgutil_runtime(logger))
 
     is_direct = bool(_URL_RE.match(query.strip()))
     video_id  = _yt_extract_video_id(query) if is_direct else None
@@ -3985,19 +3991,17 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # audio-only streams so 'bestaudio' resolves correctly.
     # Without cookies, use the full _YT_CLIENTS list (tv_embedded first for
     # bot-check bypass via player_skip=["webpage"]).
-    # COOKIE PATH: multi-client ladder — "web" first for best DASH manifest,
-    # followed by no-PO-token clients (tv_embedded, android_vr) as fallback
-    # for Heroku/cloud IPs where even authenticated "web" requests are blocked.
-    # curl-cffi TLS impersonation (jugad #42) + bgutil PO-tokens handle most
-    # cases; the extra clients serve as an IP-block safety net.
+    # COOKIE PATH: real authenticated clients only — no fake/bypass client tricks.
+    # Cookies provide full SAPISID/session auth so these clients get complete
+    # DASH manifests. bgutil generates PO-tokens for cloud IPs so "web" works
+    # from Heroku without fake player hacks.
+    # Order: web → android_music (best for Hindi/regional) → android → ios
     _cookie_preferred_clients = [
-        "web",            # Standard web with cookies — full DASH manifest, best quality
-        "tv_embedded",    # No PO-token needed — bypasses bot-check on cloud IPs
-        "android_vr",     # No PO-token needed — alternate token path
-        "web_creator",    # Creator client — skips sign-in gate
-        "android",        # Most reliable for public songs with cookies
-        "android_music",  # YouTube Music client — good for Hindi/regional tracks
-        "ios",            # iOS unique fingerprint, different CDN routing
+        "web",            # Standard web + cookies + bgutil PO-token — best DASH quality
+        "android_music",  # YouTube Music client — excellent for Hindi/regional songs
+        "android",        # Android client — high reliability with authenticated cookies
+        "ios",            # iOS client — unique CDN fingerprint, good fallback
+        "mweb",           # Mobile web — lightweight, different server routing
     ]
     p1_clients = _cookie_preferred_clients if _YTDLP_COOKIE_FILE else _YT_CLIENTS
 
