@@ -3536,6 +3536,10 @@ async def _yt_try_download(search_target: str, out_tmpl: str, client_name: str,
             "extract_flat": True,   # metadata only, no download
             "skip_download": True,
             "quiet": True,
+            # CRITICAL FIX: ytsearch1:/ytsearch5: returns a "SearchResultsPlaylist"
+            # internally. noplaylist=True (default in _yt_base_opts) makes yt-dlp
+            # 2025.x+ refuse to process it → silent empty result.
+            "noplaylist": False,
         }
         info_opts.pop("postprocessors", None)
         info_opts.pop("outtmpl", None)
@@ -3564,6 +3568,12 @@ async def _yt_try_download(search_target: str, out_tmpl: str, client_name: str,
     # Actual download: use best_url if we found one, otherwise original target
     download_target = best_url if best_url else search_target
     opts = _yt_base_opts(out_tmpl, client_name, fmt)
+    # CRITICAL FIX: ytsearch* targets return a "SearchResultsPlaylist" internally.
+    # noplaylist=True (set in _yt_base_opts) causes yt-dlp 2025.x+ to silently
+    # refuse to process it → "No video formats found" / empty result with no error.
+    # Override to False for any search target; True stays for direct video URLs.
+    if download_target.startswith(("ytsearch", "ytmsearch", "scsearch")):
+        opts["noplaylist"] = False
 
     def _run():
         try:
