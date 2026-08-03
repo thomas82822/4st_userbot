@@ -3235,9 +3235,14 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
     # Build extractor_args — skip po_token gate only when no cookies are active
     ext_args_yt: dict = {"player_client": [client]}
     _cookies_active = bool(_YTDLP_COOKIE_FILE)
-    if client in _YT_NO_POTOKEN_CLIENTS and not _cookies_active:
-        # Without cookies, skip the webpage fetch to avoid the bot-check gate.
-        # With cookies, we MUST NOT skip it — we need the full format manifest.
+    if client in _YT_NO_POTOKEN_CLIENTS:
+        # Tier-1 clients bypass PO-token entirely via player_skip — apply
+        # ALWAYS, even when cookies are active. On cloud/datacenter IPs
+        # (Heroku/Railway) YouTube blocks PO-token acquisition from the
+        # webpage regardless of cookies; player_skip skips that gate entirely.
+        # These clients receive a limited innertube manifest (no separate
+        # DASH audio), so bestaudio/best falls back to muxed streams — that
+        # is fine for voice chat since ffmpeg demuxes audio on the fly.
         ext_args_yt["player_skip"] = ["webpage"]
 
     return {
@@ -3797,10 +3802,14 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # Without cookies, use the full _YT_CLIENTS list (tv_embedded first for
     # bot-check bypass via player_skip=["webpage"]).
     _cookie_preferred_clients = [
-        # Use yt-dlp's own "default" client selection — it picks the best
-        # available client automatically (incl. curl-cffi impersonation for
-        # bypassing Heroku/cloud IP blocks on YouTube CDN).
-        "default",
+        # Tier-1 clients first — bypass PO-token entirely on cloud IPs.
+        # These work on Heroku/Railway even WITHOUT bgutil, because
+        # player_skip=["webpage"] skips the entire PO-token acquisition path.
+        "tv_embedded",    # 1 — Embedded TV player. No bot-check. Most reliable.
+        "android_vr",     # 2 — VR client. No PO-token. Different token path.
+        "web_creator",    # 3 — Creator Studio client. Skips sign-in gate.
+        # Cookie-enhanced clients — need full manifest but get blocked by
+        # cloud IP bot-check without bgutil. Try these after Tier-1 succeed.
         "android_music",  # YouTube Music — great for songs / Hindi content
         "ios",            # iOS innertube
         "mweb",           # mobile web fallback
