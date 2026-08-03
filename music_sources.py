@@ -3500,9 +3500,15 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
         # It generates Proof-of-Origin tokens that YouTube now requires for
         # cloud-IP requests — without it most clients return "No video formats".
         "extractor_args": _build_extractor_args(ext_args_yt),
-        # Cookie support — auto-injected if YTDLP_COOKIES env var is set.
-        # Enables age-restricted / geo-locked / bot-checked video playback.
-        **_cookie_opts(),
+        # BUG FIX: DO NOT inject cookies for Tier-1 no-PO-token clients.
+        # tv_embedded / android_vr / web_creator / android_testsuite use
+        # player_skip=["webpage"] to bypass the sign-in gate entirely —
+        # they work COOKIE-FREE by design. Injecting a cookiefile for these
+        # clients can confuse yt-dlp's auth flow and produce "No video
+        # formats found!" even when the cookie-free path would succeed.
+        # Cookies are only useful for authenticated DASH clients (web,
+        # android, ios) that can leverage the full session manifest.
+        **({} if client in _YT_NO_POTOKEN_CLIENTS else _cookie_opts()),
     }
 
 
@@ -3785,6 +3791,9 @@ async def piped_search_download(query: str, out_tmpl: str, logger=None) -> dict 
                             timeout=_timeout,
                         ) as r:
                             if r.status != 200:
+                                # BUG FIX: log non-200 so dead Piped instances
+                                # are visible in Heroku logs (was silent before)
+                                logger("MUSIC_DL_ERR", f"piped_search [{api}]: HTTP {r.status}")
                                 continue
                             data = await r.json(content_type=None)
                     items = [i for i in (data.get("items") or [])
@@ -3984,17 +3993,16 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
         # effect nahi. Ye fast hai aur success rate bahut zyada hai.
         # Direct URLs (watch?v=) still go straight to Phase 1 (video_id needed).
         if not is_direct:
+            # BUG FIX: Invidious removed from Phase 0.5 — logs confirmed ALL
+            # public Invidious instances are dead/blocking (502, 404, 401, 403,
+            # DNS fails, SSL errors). Keeping it was adding 8s of dead-weight
+            # delay before Phase 1 with 0% success rate. Only Piped remains.
             _p05_piped_tmpl = out_tmpl + f"_p05piped_{ts}.%(ext)s"
             result = await piped_search_download(query, _p05_piped_tmpl, logger)
             if result:
                 logger("MUSIC_YT", f"✓ [piped-early/cookie-path] {result['title']!r}")
                 return result
-            _p05_inv_tmpl = out_tmpl + f"_p05inv_{ts}.%(ext)s"
-            result = await _yt_search_via_invidious(query, _p05_inv_tmpl, logger)
-            if result:
-                logger("MUSIC_YT", f"✓ [invidious-early/cookie-path] {result['title']!r}")
-                return result
-            logger("MUSIC_YT", "Piped/Invidious miss — falling through to direct YouTube Phase 1.")
+            logger("MUSIC_YT", "Piped miss — falling through to direct YouTube Phase 1.")
         # Fall through to Phase 1 (cookies injected via _cookie_opts in _yt_base_opts)
     else:
         # ─── Phase 0: Piped / Invidious search+download (no youtube.com hit) ──
