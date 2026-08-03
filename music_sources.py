@@ -3985,13 +3985,19 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # audio-only streams so 'bestaudio' resolves correctly.
     # Without cookies, use the full _YT_CLIENTS list (tv_embedded first for
     # bot-check bypass via player_skip=["webpage"]).
-    # COOKIE PATH: direct web client only — no client chain juggling.
-    # With valid YTDLP_COOKIES + curl-cffi TLS impersonation (jugad #42),
-    # the standard web client authenticates via SAPISID/cookie hash and
-    # returns the full DASH manifest with audio-only streams.
-    # bgutil (_ensure_bgutil_runtime) handles PO-tokens for cloud IPs.
+    # COOKIE PATH: multi-client ladder — "web" first for best DASH manifest,
+    # followed by no-PO-token clients (tv_embedded, android_vr) as fallback
+    # for Heroku/cloud IPs where even authenticated "web" requests are blocked.
+    # curl-cffi TLS impersonation (jugad #42) + bgutil PO-tokens handle most
+    # cases; the extra clients serve as an IP-block safety net.
     _cookie_preferred_clients = [
-        "web",   # Standard web with cookies — full DASH manifest, best audio quality
+        "web",            # Standard web with cookies — full DASH manifest, best quality
+        "tv_embedded",    # No PO-token needed — bypasses bot-check on cloud IPs
+        "android_vr",     # No PO-token needed — alternate token path
+        "web_creator",    # Creator client — skips sign-in gate
+        "android",        # Most reliable for public songs with cookies
+        "android_music",  # YouTube Music client — good for Hindi/regional tracks
+        "ios",            # iOS unique fingerprint, different CDN routing
     ]
     p1_clients = _cookie_preferred_clients if _YTDLP_COOKIE_FILE else _YT_CLIENTS
 
@@ -4016,6 +4022,25 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
             # Technique #35: brief backoff between clients
             if client_idx < len(p1_clients) - 1:
                 await asyncio.sleep(0.3)
+
+    # ─── Phase 1.5: Cookie-path Piped/Invidious search fallback ───────────
+    # When YTDLP_COOKIES is set we skip Piped/Invidious in Phase 0.
+    # But Heroku/cloud IPs can be blocked by YouTube even with valid cookies
+    # (returns "No video formats found!" for every client).
+    # If Phase 1 failed for a search query, try Piped/Invidious as a
+    # fallback — they route extraction through their own servers, bypassing
+    # the Heroku IP block entirely.
+    if _use_cookies_path and not is_direct:
+        p15_piped_tmpl = out_tmpl + f"_p15piped_{ts}.%(ext)s"
+        result = await piped_search_download(query, p15_piped_tmpl, logger)
+        if result:
+            logger("MUSIC_YT", f"✓ [piped-fallback/cookie-path] {result['title']!r}")
+            return result
+        p15_inv_tmpl = out_tmpl + f"_p15inv_{ts}.%(ext)s"
+        result = await _yt_search_via_invidious(query, p15_inv_tmpl, logger)
+        if result:
+            logger("MUSIC_YT", f"✓ [invidious-fallback/cookie-path] {result['title']!r}")
+            return result
 
     # ─── Phase 2: Piped + Invidious (URL fallback) ─────────────────────
     if video_id:
