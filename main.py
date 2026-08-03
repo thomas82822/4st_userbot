@@ -1992,23 +1992,9 @@ async def _search_and_download_audio_core(query: str):
             return None
 
     # ── all sources, ordered by stated priority ─────────────────────────
-    # Heroku USA IP pe YouTube (koi bhi client) block hai, isliye:
-    # - JioSaavn: PRIMARY source — Heroku pe perfect kaam karta hai, Hindi/
-    #   Bollywood songs ke liye best coverage, apna CDN use karta hai.
-    # - Piped: PARALLEL — Piped proxy ke through download (googlevideo.com
-    #   directly nahi — Piped apne servers se serve karta hai).
-    # - YouTube: still tried — agar bgutil/cookies work karein kabhi.
-    _SOURCE_TIMEOUT = 60  # Full song download ke liye 60s chahiye (JioSaavn/Piped)
+    _SOURCE_TIMEOUT = 20
     sources = [
-        # JioSaavn: BEST for Heroku — India ka CDN, koi block nahi, full songs.
-        ("jiosaavn", music_sources.jiosaavn_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_js.%(ext)s"),
-            bot_logger), 0.0),
-        # Piped: parallel — requests+ffmpeg (Piped proxy, not googlevideo.com).
-        ("piped", music_sources.piped_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_pd.%(ext)s"),
-            bot_logger), 0.0),
-        # YouTube: still tried — works if cookies+bgutil active.
+        # YouTube: primary — authenticated via cookies, full DASH manifest.
         ("youtube", music_sources.youtube_search_download(
             query, os.path.join(MUSIC_CACHE, f"audio_{ets}_yt2.%(ext)s"),
             bot_logger), 0.0),
