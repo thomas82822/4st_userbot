@@ -168,7 +168,24 @@ def _init_yt_cookies():
             # Ensure the Netscape header line is present (yt-dlp requires it)
             if not content.lstrip().startswith("# Netscape HTTP Cookie File"):
                 content = "# Netscape HTTP Cookie File\n\n" + content.lstrip()
-            f.write(content)
+            # Validate lines: only write comments + valid 7-field Netscape entries.
+            # Rejects HTML, JSON, or space-separated cookies that cause yt-dlp to
+            # throw "does not look like a Netscape format cookies file".
+            valid_lines = []
+            for line in content.splitlines():
+                stripped = line.rstrip()
+                if not stripped or stripped.startswith("#"):
+                    valid_lines.append(stripped)
+                    continue
+                # Auto-convert space-separated → tab-separated (common copy-paste issue)
+                if "\t" not in stripped:
+                    parts = stripped.split()
+                    if len(parts) == 7:
+                        stripped = "\t".join(parts)
+                # Accept only lines with exactly 7 tab-separated fields
+                if stripped.count("\t") == 6:
+                    valid_lines.append(stripped)
+            f.write("\n".join(valid_lines) + "\n")
         _YTDLP_COOKIE_FILE = path
     except Exception:
         _YTDLP_COOKIE_FILE = None
