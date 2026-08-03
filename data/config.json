@@ -54,7 +54,9 @@
     },
     "HELP_REPORT_LINK": "https://t.me/+X1UQ5x4szFA3NDc1",
     "BOT_USERS": [],
-    "BOT_GROUPS": [],
+    "BOT_GROUPS": [
+        -1003685719486
+    ],
     "PYRO_SESSION": "",
     "PYRO_SESSIONS": {},
     "MUSIC_MAX_QUALITY": "high",
