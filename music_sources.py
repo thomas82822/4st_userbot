@@ -3102,16 +3102,25 @@ _YT_UPDATE_DONE = False  # technique #39: update once per process
 
 def _ensure_ytdlp_updated_sync():
     """Actual blocking pip call — must only ever run off the event loop
-    thread (see `_ensure_ytdlp_updated` below)."""
+    thread (see `_ensure_ytdlp_updated` below).
+
+    BUG FIX: flag was set True BEFORE running pip, so if pip failed
+    (network timeout, permission error, etc.) future calls would skip
+    the update entirely — yt-dlp stayed stale forever after one bad
+    attempt. Fix: only mark done AFTER pip returns successfully.
+    """
     global _YT_UPDATE_DONE
     if _YT_UPDATE_DONE or yt_dlp is None:
         return
-    _YT_UPDATE_DONE = True
     try:
-        subprocess.run(
+        result = subprocess.run(
             [_sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", "yt-dlp"],
             capture_output=True, timeout=45,
         )
+        # Mark done only on success (returncode 0) so a failed pip attempt
+        # can be retried on the next music request instead of silently skipping.
+        if result.returncode == 0:
+            _YT_UPDATE_DONE = True
     except Exception:
         pass
 

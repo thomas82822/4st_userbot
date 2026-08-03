@@ -1956,13 +1956,21 @@ async def search_and_download_audio(query: str):
 
 
 async def _search_and_download_audio_core(query: str):
-    """Race YouTube (primary, with cookies) and Piped (backup) in parallel.
+    """Race YouTube + JioSaavn + SoundCloud + Deezer + iTunes in parallel.
 
     YouTube is the primary source — cookies give full DASH manifests and
-    reliable format selection. Piped is the fallback via open-source YouTube
-    frontends that extract on their own servers, bypassing datacenter IP blocks.
+    reliable format selection.  On Heroku/cloud IPs YouTube often returns
+    "No video formats found!" even with valid cookies, so JioSaavn and
+    SoundCloud run simultaneously with a small stagger so the first working
+    source wins without waiting for YouTube to exhaust its client ladder.
 
-    Returns the first valid MusicTrack, or None if both fail.
+    BUG FIX (2026-08): sources list previously only contained YouTube.
+    When YouTube fails (Heroku cloud-IP block → "No video formats found!"),
+    there was zero fallback — song appeared to "not play" even though the
+    file-check passed. Fix: add JioSaavn (best for Hindi/Bollywood),
+    SoundCloud, Deezer preview, and iTunes preview as parallel race entrants.
+
+    Returns the first valid MusicTrack, or None if all fail.
     """
     ets = int(time.time() * 1000)   # source timestamp (avoids filename clashes)
 
@@ -1974,7 +1982,7 @@ async def _search_and_download_audio_core(query: str):
     # sources already failed. Every source gets a fixed timeout so its
     # task ALWAYS completes (with a real result or None), which guarantees
     # the overall race loop always terminates.
-    _SOURCE_TIMEOUT = 20
+    _SOURCE_TIMEOUT = 25
 
     async def _extra_src(name, coro, delay=0.0):
         """Wrap a music_sources coroutine; convert its dict -> MusicTrack.
@@ -1998,12 +2006,43 @@ async def _search_and_download_audio_core(query: str):
             return None
 
     # ── all sources, ordered by stated priority ─────────────────────────
-    _SOURCE_TIMEOUT = 20
+    # Stagger logic:
+    #   delay=0.0  → start immediately (highest priority)
+    #   delay=1.0  → start after 1s (run in parallel, slight preference to above)
+    #   delay=2.0  → last resort (preview-only sources like iTunes)
+    #
+    # On Heroku cloud IPs YouTube usually takes 15-30s to exhaust its client
+    # ladder before failing.  JioSaavn/SoundCloud typically respond in 3-8s —
+    # with delay=0 they win the race long before YouTube gives up.
+    _SOURCE_TIMEOUT = 25
     sources = [
         # YouTube: primary — authenticated via cookies, full DASH manifest.
         ("youtube", music_sources.youtube_search_download(
             query, os.path.join(MUSIC_CACHE, f"audio_{ets}_yt2.%(ext)s"),
             bot_logger), 0.0),
+
+        # JioSaavn: best for Hindi/Bollywood/Indian-regional — public API,
+        # no login, full songs, works from any IP including Heroku.
+        ("jiosaavn", music_sources.jiosaavn_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_jio.%(ext)s"),
+            bot_logger), 0.0),
+
+        # SoundCloud: strong for English/indie — direct SC API v2 path,
+        # routes through SoundCloud CDN (not YouTube), works from cloud IPs.
+        ("soundcloud", music_sources.soundcloud_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_sc.%(ext)s"),
+            _YDL_COMMON, bot_logger), 1.0),
+
+        # Deezer 30-s preview: global coverage, works from all IPs.
+        ("deezer", music_sources.deezer_preview_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_dz.%(ext)s"),
+            bot_logger), 1.0),
+
+        # iTunes 30-s preview: last resort — virtually every commercial
+        # track globally including all Bollywood. 30 s is better than silence.
+        ("itunes", music_sources.itunes_preview_search_download(
+            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_it.%(ext)s"),
+            bot_logger), 2.0),
     ]
 
     # ── parallel race ────────────────────────────────────────────────────
