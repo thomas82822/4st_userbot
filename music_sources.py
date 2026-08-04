@@ -3290,50 +3290,55 @@ def _cloud_download_sync(
     is_search = not (url_or_query.startswith("http://") or url_or_query.startswith("https://"))
     target = f"ytsearch1:{url_or_query}" if is_search else url_or_query
 
-    # Format combos — Musicbot order: web+cookies first, then default fallback
-    combos = []
+    # Combo format: (format_string, clients_list, need_player_skip)
+    # Ordering: no-PO-token clients FIRST so it works even without bgutil/cookies.
+    #
+    # tv_embedded + player_skip=["webpage"]: skips the sign-in gate entirely —
+    # no cookies, no PO-token needed. Gives limited DASH manifest (no separate
+    # audio DASH stream) but ffmpeg extracts audio fine from muxed stream.
+    # This is the most reliable on cloud IPs.
+    #
+    # web + cookies + bgutil: full DASH manifest, best quality. Needs bgutil
+    # PO-token because cloud IPs can't acquire PO-token from the webpage.
+    combos = [
+        # (fmt, clients, use_player_skip)
+        ("bestaudio/best",                    ["tv_embedded"],       True),
+        ("bestaudio/best",                    ["android_vr"],        True),
+    ]
     if cookie:
         combos += [
-            ("bestaudio[ext=m4a]/bestaudio/best", ["web"]),
-            ("bestaudio/best",                    ["web", "default"]),
+            ("bestaudio[ext=m4a]/bestaudio/best", ["web"],           False),
+            ("bestaudio/best",                    ["web", "default"], False),
         ]
     combos += [
-        ("bestaudio/best",  ["tv_embedded"]),
-        ("bestaudio/best",  ["default"]),
+        ("bestaudio/best",                    ["default"],           False),
     ]
 
-    _RETRYABLE = (
-        "Requested format is not available",
-        "format is not available",
-        "No video formats found",
-        "Sign in to confirm",
-        "This video is not available",
-        "HTTP Error 403",
-        "HTTP Error 429",
-    )
-
-    for fmt, clients in combos:
-        ext_args: dict = {
-            "youtube": {
-                "player_client": clients,
-            }
-        }
+    for fmt, clients, use_player_skip in combos:
+        yt_ext: dict = {"player_client": clients}
+        if use_player_skip:
+            # player_skip=["webpage"] bypasses the "Sign in to confirm" gate
+            # that YouTube shows on cloud/datacenter IPs. Without this, even
+            # tv_embedded tries to load the webpage for PO-token and fails.
+            yt_ext["player_skip"] = ["webpage"]
+        ext_args: dict = {"youtube": yt_ext}
         if _BGUTIL_ACTIVE:
             ext_args["youtubepot-bgutilscript"] = {"server_home": [_BGUTIL_SERVER_HOME]}
 
         opts: dict = {
             "format":           fmt,
             "outtmpl":          out_tmpl,
-            "quiet":            True,
-            "no_warnings":      True,
-            "noplaylist":       not is_search,   # allow search playlist processing
+            "quiet":            False,   # ← keep stderr for debug logging below
+            "no_warnings":      False,
+            "noplaylist":       not is_search,
             "geo_bypass":       True,
             "geo_bypass_country": "US",
             "check_formats":    False,
             "socket_timeout":   6,
-            "retries":          3,
-            "fragment_retries": 5,
-            "concurrent_fragment_downloads": 16,  # Musicbot speed jugad
+            "retries":          1,       # fast fail — don't retry same broken client
+            "extractor_retries": 1,
+            "fragment_retries": 3,
+            "concurrent_fragment_downloads": 16,
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -3348,44 +3353,63 @@ def _cloud_download_sync(
                 "preferredquality": "192",
             }],
             "extractor_args": ext_args,
-            # Musicbot jugad: js_runtimes + remote_components
             **_get_js_runtime_opts(),
-            # curl_cffi Chrome TLS impersonation
             **_get_impersonate_opt(),
         }
-        if cookie:
+        if cookie and not use_player_skip:
             opts["cookiefile"] = cookie
 
-        def _run(o=opts, t=target, _is_search=is_search):
-            try:
-                with yt_dlp.YoutubeDL(o) as ydl:
-                    info = ydl.extract_info(t, download=True)
-                    if isinstance(info, dict) and "entries" in info:
-                        entries = [e for e in (info.get("entries") or []) if e]
-                        info = entries[0] if entries else None
-                    return info
-            except Exception:
-                return None
+        # Capture yt-dlp stderr for debug logging
+        _ydl_error: list[str] = []
 
+        class _ErrLogger:
+            def debug(self, msg):   pass
+            def warning(self, msg): _ydl_error.append(f"WARN: {msg}")
+            def error(self, msg):   _ydl_error.append(f"ERR: {msg}")
+
+        opts["logger"] = _ErrLogger()
+
+        info = None
         try:
-            info = _run()
-            if info:
-                for ext in ("opus", "mp3", "m4a", "webm", "ogg"):
-                    p = out_tmpl.replace("%(ext)s", ext)
-                    if os.path.exists(p) and os.path.getsize(p) > 4096:
-                        logger("MUSIC_DL", f"cloud_dl ✓ [{clients}] '{(info.get('title',''))[:50]}'")
-                        return {
-                            "title":     info.get("title", url_or_query),
-                            "file_path": p,
-                            "duration":  int(info.get("duration") or 0),
-                            "thumbnail": info.get("thumbnail"),
-                            "source":    "youtube",
-                        }
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                raw = ydl.extract_info(target, download=True)
+                if isinstance(raw, dict) and "entries" in raw:
+                    entries = [e for e in (raw.get("entries") or []) if e]
+                    info = entries[0] if entries else None
+                else:
+                    info = raw
         except Exception as exc:
-            logger("MUSIC_DL_ERR", f"cloud_dl [{clients}]: {exc}")
+            err_str = str(exc)
+            if _ydl_error:
+                err_str = _ydl_error[-1] + " | " + err_str
+            logger("MUSIC_DL_ERR", f"cloud_dl [{clients}]: {err_str[:200]}")
+            # Cleanup partial files
+            for ext in ("opus", "mp3", "m4a", "webm", "part", "ytdl"):
+                p = out_tmpl.replace("%(ext)s", ext)
+                if os.path.exists(p):
+                    with contextlib.suppress(Exception):
+                        os.remove(p)
             continue
 
-        # Cleanup partial files on failure
+        if _ydl_error:
+            logger("MUSIC_DL_ERR", f"cloud_dl [{clients}] ydl-errors: {'; '.join(_ydl_error[-3:])[:300]}")
+
+        if info:
+            for ext in ("opus", "mp3", "m4a", "webm", "ogg"):
+                p = out_tmpl.replace("%(ext)s", ext)
+                if os.path.exists(p) and os.path.getsize(p) > 4096:
+                    logger("MUSIC_DL", f"cloud_dl ✓ [{clients}] '{(info.get('title',''))[:50]}'")
+                    return {
+                        "title":     info.get("title", url_or_query),
+                        "file_path": p,
+                        "duration":  int(info.get("duration") or 0),
+                        "thumbnail": info.get("thumbnail"),
+                        "source":    "youtube",
+                    }
+        else:
+            logger("MUSIC_DL_ERR", f"cloud_dl [{clients}]: ydl returned no info")
+
+        # Cleanup partial files on no-result
         for ext in ("opus", "mp3", "m4a", "webm", "part", "ytdl"):
             p = out_tmpl.replace("%(ext)s", ext)
             if os.path.exists(p):
@@ -4157,14 +4181,18 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     # IP-blocked. Piped instances are mostly dead (403/502). The complex
     # 10-client ladder wastes 5-15 minutes before giving up.
     #
-    # Musicbot's proven approach: skip CDN entirely, download locally using
-    # curl_cffi Chrome TLS impersonation + Deno js_runtimes + ejs:github +
-    # bgutil PO-token. This works on every Heroku dyno.
-    #
-    # Only use this when cookies are set — the web client needs auth to
-    # get the full DASH audio manifest on cloud IPs.
-    if _ON_CLOUD_HOST and _YTDLP_COOKIE_FILE:
-        logger("MUSIC_YT", "☁️ Cloud host detected — Musicbot jugad (direct local download)")
+    # Musicbot's proven approach: skip CDN, download locally via:
+    #   - tv_embedded + player_skip (no cookies, no bgutil needed) → FIRST
+    #   - web + cookies + bgutil (best quality when available) → SECOND
+    # This works on every Heroku dyno regardless of bgutil status.
+    if _ON_CLOUD_HOST:
+        _deno = _find_deno()
+        logger("MUSIC_YT", (
+            f"☁️ Cloud host — Musicbot jugad | "
+            f"bgutil={'✅' if _BGUTIL_ACTIVE else '❌'} | "
+            f"deno={'✅ ' + str(_deno)[:40] if _deno else '❌ not found'} | "
+            f"cookies={'✅' if _YTDLP_COOKIE_FILE else '❌'}"
+        ))
         _ph_tmpl = out_tmpl + f"_phcloud_{ts}.%(ext)s"
         try:
             result = await asyncio.get_event_loop().run_in_executor(
