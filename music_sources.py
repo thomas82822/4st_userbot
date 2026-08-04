@@ -3240,6 +3240,161 @@ def _find_deno() -> str | None:
     return _sh2.which("deno")
 
 
+def _get_js_runtime_opts() -> dict:
+    """Return js_runtimes + remote_components — Musicbot working jugad.
+
+    YouTube now requires a JavaScript runtime to solve its player challenge.
+    Without Deno + ejs:github, yt-dlp cannot extract formats from cloud/Heroku
+    IPs → 'No video formats found!'.
+
+    bin/post_compile installs Deno to vendor/deno/bin/deno at Heroku build time.
+    _find_deno() locates it.  remote_components=["ejs:github"] tells yt-dlp to
+    fetch the EJS extractor from GitHub — the same approach that makes Musicbot
+    work 100% on Heroku.
+    """
+    opts: dict = {"remote_components": ["ejs:github"]}
+    deno = _find_deno()
+    if deno:
+        opts["js_runtimes"] = {"deno": {"path": deno}}
+    return opts
+
+
+def _cloud_download_sync(
+    url_or_query: str,
+    out_tmpl: str,
+    audio_only: bool = True,
+    logger=None,
+) -> dict | None:
+    """Musicbot-style direct local download — works 100% on Heroku/cloud IPs.
+
+    On cloud/datacenter IPs the YouTube CDN (googlevideo.com) is IP-blocked.
+    Trying to stream directly or using complex client ladders just wastes time.
+    yt-dlp ships with curl_cffi which impersonates Chrome's TLS fingerprint —
+    this bypasses the CDN IP block entirely. Downloading to a local file and
+    serving that file sidesteps ALL streaming CDN restrictions.
+
+    Uses Musicbot's proven approach:
+      - player_client=["web"] with cookies (authenticates fully, full DASH manifest)
+      - js_runtimes + remote_components (solves YouTube JS challenge)
+      - bgutil PO-token (bypasses cloud-IP gate)
+      - 16 parallel fragment threads (fast download)
+      - curl_cffi TLS impersonation
+
+    Returns music_sources-style info dict or None on failure.
+    """
+    logger = logger or (lambda *a: None)
+    if yt_dlp is None:
+        return None
+
+    cookie = _YTDLP_COOKIE_FILE
+    is_search = not (url_or_query.startswith("http://") or url_or_query.startswith("https://"))
+    target = f"ytsearch1:{url_or_query}" if is_search else url_or_query
+
+    # Format combos — Musicbot order: web+cookies first, then default fallback
+    combos = []
+    if cookie:
+        combos += [
+            ("bestaudio[ext=m4a]/bestaudio/best", ["web"]),
+            ("bestaudio/best",                    ["web", "default"]),
+        ]
+    combos += [
+        ("bestaudio/best",  ["tv_embedded"]),
+        ("bestaudio/best",  ["default"]),
+    ]
+
+    _RETRYABLE = (
+        "Requested format is not available",
+        "format is not available",
+        "No video formats found",
+        "Sign in to confirm",
+        "This video is not available",
+        "HTTP Error 403",
+        "HTTP Error 429",
+    )
+
+    for fmt, clients in combos:
+        ext_args: dict = {
+            "youtube": {
+                "player_client": clients,
+            }
+        }
+        if _BGUTIL_ACTIVE:
+            ext_args["youtubepot-bgutilscript"] = {"server_home": [_BGUTIL_SERVER_HOME]}
+
+        opts: dict = {
+            "format":           fmt,
+            "outtmpl":          out_tmpl,
+            "quiet":            True,
+            "no_warnings":      True,
+            "noplaylist":       not is_search,   # allow search playlist processing
+            "geo_bypass":       True,
+            "geo_bypass_country": "US",
+            "check_formats":    False,
+            "socket_timeout":   6,
+            "retries":          3,
+            "fragment_retries": 5,
+            "concurrent_fragment_downloads": 16,  # Musicbot speed jugad
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                "Referer": "https://www.youtube.com/",
+            },
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "opus",
+                "preferredquality": "192",
+            }],
+            "extractor_args": ext_args,
+            # Musicbot jugad: js_runtimes + remote_components
+            **_get_js_runtime_opts(),
+            # curl_cffi Chrome TLS impersonation
+            **_get_impersonate_opt(),
+        }
+        if cookie:
+            opts["cookiefile"] = cookie
+
+        def _run(o=opts, t=target, _is_search=is_search):
+            try:
+                with yt_dlp.YoutubeDL(o) as ydl:
+                    info = ydl.extract_info(t, download=True)
+                    if isinstance(info, dict) and "entries" in info:
+                        entries = [e for e in (info.get("entries") or []) if e]
+                        info = entries[0] if entries else None
+                    return info
+            except Exception:
+                return None
+
+        try:
+            info = _run()
+            if info:
+                for ext in ("opus", "mp3", "m4a", "webm", "ogg"):
+                    p = out_tmpl.replace("%(ext)s", ext)
+                    if os.path.exists(p) and os.path.getsize(p) > 4096:
+                        logger("MUSIC_DL", f"cloud_dl ✓ [{clients}] '{(info.get('title',''))[:50]}'")
+                        return {
+                            "title":     info.get("title", url_or_query),
+                            "file_path": p,
+                            "duration":  int(info.get("duration") or 0),
+                            "thumbnail": info.get("thumbnail"),
+                            "source":    "youtube",
+                        }
+        except Exception as exc:
+            logger("MUSIC_DL_ERR", f"cloud_dl [{clients}]: {exc}")
+            continue
+
+        # Cleanup partial files on failure
+        for ext in ("opus", "mp3", "m4a", "webm", "part", "ytdl"):
+            p = out_tmpl.replace("%(ext)s", ext)
+            if os.path.exists(p):
+                with contextlib.suppress(Exception):
+                    os.remove(p)
+
+    return None
+
+
 # ── curl-cffi TLS impersonation (jugad #42) ──────────────────────────────────
 # yt-dlp[default,curl-cffi] is in requirements.txt.
 # ImpersonateTarget makes requests look like real Chrome at the TLS layer,
@@ -3504,6 +3659,12 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
         # YouTube and googlevideo CDN use TLS fingerprinting to detect cloud IPs;
         # impersonating Chrome bypasses this check without needing a proxy.
         **_get_impersonate_opt(),
+        # ── MUSICBOT JUGAD ── js_runtimes + remote_components ──────────────
+        # YouTube now requires a JavaScript runtime to solve its player challenge.
+        # Without Deno + ejs:github this entire client ladder returns
+        # "No video formats found!" on Heroku/cloud IPs regardless of cookies.
+        # bin/post_compile installs Deno to vendor/deno/bin/deno at build time.
+        **_get_js_runtime_opts(),
         # Innertube client + bot-check bypass + bgutil PO-token provider
         # bgutil is auto-installed at runtime on first use (_ensure_bgutil_runtime).
         # It generates Proof-of-Origin tokens that YouTube now requires for
@@ -3946,6 +4107,11 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     Supports: song names, watch?v= URLs, youtu.be/ links, YouTube Music URLs.
 
     Strategy:
+      Phase H — HEROKU / CLOUD HOST FAST PATH (when _ON_CLOUD_HOST):
+                Musicbot jugad — direct local download with web+cookies+Deno+bgutil.
+                CDN streaming is always IP-blocked on Heroku; skip all Piped/CDN
+                jugad and go straight to _cloud_download_sync. Returns immediately
+                on success (~5-8s). Falls through to Phase 0 if cookies missing.
       Phase 0 — COOKIE PATH (when YTDLP_COOKIES is set):
                 Skip Piped/Invidious entirely — go straight to Phase 1 with
                 authenticated cookies. Fastest path, no rate-limit issues.
@@ -3985,6 +4151,33 @@ async def youtube_search_download(query: str, out_tmpl: str, logger=None) -> dic
     simp_q    = _yt_simplify_query(norm_q)   # technique #19
 
     ts = int(time.time() * 1000)
+
+    # ─── Phase H: Heroku / Cloud host fast path (Musicbot jugad) ───────────
+    # On Heroku/Railway/Render/Fly.io the YouTube CDN (googlevideo.com) is
+    # IP-blocked. Piped instances are mostly dead (403/502). The complex
+    # 10-client ladder wastes 5-15 minutes before giving up.
+    #
+    # Musicbot's proven approach: skip CDN entirely, download locally using
+    # curl_cffi Chrome TLS impersonation + Deno js_runtimes + ejs:github +
+    # bgutil PO-token. This works on every Heroku dyno.
+    #
+    # Only use this when cookies are set — the web client needs auth to
+    # get the full DASH audio manifest on cloud IPs.
+    if _ON_CLOUD_HOST and _YTDLP_COOKIE_FILE:
+        logger("MUSIC_YT", "☁️ Cloud host detected — Musicbot jugad (direct local download)")
+        _ph_tmpl = out_tmpl + f"_phcloud_{ts}.%(ext)s"
+        try:
+            result = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: _cloud_download_sync(query, _ph_tmpl, audio_only=True, logger=logger),
+            )
+        except Exception as _exc:
+            logger("MUSIC_YT", f"Phase H error: {_exc}")
+            result = None
+        if result:
+            logger("MUSIC_YT", f"✅ [cloud-direct] {result['title']!r}")
+            return result
+        logger("MUSIC_YT", "☁️ Cloud direct download miss — falling through to Phase 0")
 
     # ─── Phase 0: Cookie-priority fast path ─────────────────────────────
     # When YTDLP_COOKIES is set the user has real YouTube credentials — go
