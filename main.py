@@ -29,10 +29,29 @@ _FFMPEG_SEARCH_PATHS = [
 ]
 
 def _find_binary(name: str) -> str | None:
+    import shutil as _shutil_main
+    # HEROKU FIX: try shutil.which first — respects whatever PATH is currently set
+    found = _shutil_main.which(name)
+    if found:
+        return found
     for d in _FFMPEG_SEARCH_PATHS:
         p = os.path.join(d, name)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
+    # HEROKU FIX: worker dynos skip .profile.d so /app/.apt/usr/bin is never in PATH.
+    # Scan filesystem at runtime as a reliable last resort.
+    try:
+        import subprocess as _sp_main
+        result = _sp_main.run(
+            ["find", "/app", "/usr", "-name", name, "-type", "f", "-maxdepth", "8"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line and os.path.isfile(line) and os.access(line, os.X_OK):
+                return line
+    except Exception:
+        pass
     return None
 
 _FFMPEG_BIN  = _find_binary("ffmpeg")
@@ -637,7 +656,7 @@ async def _ai_generate(prompt: str) -> str:
 
 ai_modes = {}
 
-# ══════════════════════════════════════════
+# ═══════════════════════════════��══════════
 # DEFAULT WORD LISTS
 # ══════════════════════════════════════════
 DEFAULT_ABUSES = [
@@ -684,7 +703,7 @@ for _path, _defaults in [
 FONT_MAPS = {
     1: {"chars": "𝑨𝑩𝑪𝑫𝑬𝑭𝑮𝑯𝑰𝑱𝑲𝑳𝑴𝑵𝑶𝑷𝑸𝑹𝑺𝑻𝑼𝑽𝑾𝑿𝒀𝒁𝒂𝒃𝒄𝒅𝒆𝒇𝒈𝒉𝒊𝒋𝒌𝒍𝒎𝒏𝒐𝒑𝒒𝒓𝒔𝒕𝒖𝒗𝒘𝒙𝒚𝒛0123456789",
        "orig": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"},
-    2: {"chars": "𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
+    2: {"chars": "𝐀𝐁𝐂𝐃𝐄��𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
        "orig": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"},
     3: {"chars": "ΑΒ𝐶DEFGHIJKLMNOPQRSTUVWXYZ𝑎bcdefghijklmnopqrstuvwxyz0123456789",
        "orig": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"},
