@@ -2768,17 +2768,11 @@ async def resolve_zero_disk_stream(query: str, logger=None, allow_live: bool = F
             logger("MUSIC_DL_ERR", f"resolve_zero_disk_stream/{fn.__name__}: {exc}")
             return None
 
-    # BUG FIX: Parallel race with ALL fast zero-disk sources.
-    # On Heroku/cloud IPs, YouTube CDN is blocked so Piped alone often fails.
-    # JioSaavn works from ANY IP (no CDN block) and is fastest for Indian songs.
-    # SoundCloud has a great English catalog. All three run simultaneously so
-    # the first working source wins — total latency = fastest single source.
+    # Only Piped zero-disk — YouTube (with cookies) is the primary source.
     tasks = {
         asyncio.create_task(_safe(fn)): fn.__name__
         for fn in (
-            zero_disk_jiosaavn_lookup,   # ① JioSaavn — fastest, works on Heroku (no YouTube CDN)
-            zero_disk_soundcloud_lookup, # ② SoundCloud — good English/International catalog
-            zero_disk_piped_lookup,      # ③ YouTube via Piped frontend (YouTube backup)
+            zero_disk_piped_lookup,      # ① YouTube via Piped frontend (backup)
         )
     }
     pending = set(tasks)

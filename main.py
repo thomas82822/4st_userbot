@@ -1861,13 +1861,25 @@ _YDL_COMMON = {
 # ══════════════════════════════════════════
 
 async def search_and_download_audio(query: str):
+    """Download audio from YouTube using cookies (YTDLP_COOKIES env var).
+
+    Strictly YouTube-only — no JioSaavn, SoundCloud, Deezer, or any other
+    source. Mirrors the working Musicbot pattern: yt-dlp + cookies + local
+    download. YTDLP_COOKIES must be set on Heroku (Netscape format cookie file
+    content) — without cookies, cloud IPs get IP-blocked by YouTube.
+
+    Flow:
+      1. Stream cache (avoid re-downloading the same song)
+      2. YouTube download via music_sources.youtube_search_download()
+         — On Heroku/_ON_CLOUD_HOST: Phase H (local download, cookies, bgutil)
+         — Direct URL: just download that video
+         — Text query: ytsearch1: → download top result
+      3. One retry after 2 s if the first attempt fails (transient errors)
+    """
     if not YTDLP_AVAILABLE:
         return None
 
-    # 0) Stream cache — same song requested before and the file is still on
-    #    disk, skip the whole search/download pipeline. (Zero-disk tracks
-    #    are never written here — their remote URLs are often short-lived
-    #    signed links, so they're re-resolved fresh every time instead.)
+    # 1) Stream cache — same song, file still on disk → reuse immediately
     cached = _stream_cache.get(query)
     if cached:
         bot_logger("MUSIC_CACHE_HIT", f"Reusing cached file for: {query}")
@@ -1877,263 +1889,62 @@ async def search_and_download_audio(query: str):
             thumbnail=cached.get("thumbnail"), source=cached["source"],
         )
 
-    # 0.5) Zero-disk fast path (jugad #1/#2/#4/#5/#6/#10) — try to get a
-    #      directly-playable remote URL with no local file at all.
-    #      SKIPPED when YTDLP_COOKIES is set: cookies make YouTube the
-    #      fastest and most reliable source, so we go straight to YouTube
-    #      (step 1.5 below) without wasting time on Piped/Invidious/JioSaavn
-    #      zero-disk sources that are slower and rate-limited.
-    _has_yt_cookies = bool(os.environ.get("YTDLP_COOKIES", "").strip())
-    if not _has_yt_cookies and (not music_sources.is_url(query) or music_sources.is_direct_media_url(query)):
-        allow_live = bool(re.search(r"(?i)\blive\b|\breaction\b|\bloop\b", query))
+    async def _yt_download(suffix: str) -> MusicTrack | None:
+        ets     = int(time.time() * 1000)
+        tmpl    = os.path.join(MUSIC_CACHE, f"audio_{ets}_{suffix}.%(ext)s")
         try:
-            zd = await asyncio.wait_for(
-                music_sources.resolve_zero_disk_stream(query, logger=bot_logger, allow_live=allow_live),
-                timeout=12.0,
+            result = await asyncio.wait_for(
+                music_sources.youtube_search_download(query, tmpl, logger=bot_logger),
+                timeout=120.0,
             )
         except asyncio.TimeoutError:
-            zd = None
-            bot_logger("MUSIC_ZERO_DISK_TIMEOUT", f"Zero-disk sources timed out (12s) for: {query!r}")
-        if zd and zd.get("stream_url"):
-            return MusicTrack(
-                title=zd["title"], file_path=None, stream_url=zd["stream_url"],
-                duration=zd.get("duration", 0), is_video=False,
-                thumbnail=zd.get("thumbnail"), source=zd["source"],
-            )
-
-    # 1) Any pasted URL — YouTube links go through youtube_search_download
-    #    (cookies path), everything else goes through resolve_link.
-    if music_sources.is_url(query):
-        if music_sources.is_youtube_url(query):
-            ets_yturl = int(time.time() * 1000)
-            yt_url_tmpl = os.path.join(MUSIC_CACHE, f"audio_{ets_yturl}_yturl.%(ext)s")
-            try:
-                yt_url_result = await asyncio.wait_for(
-                    music_sources.youtube_search_download(query, yt_url_tmpl, logger=bot_logger),
-                    timeout=90.0,
-                )
-            except asyncio.TimeoutError:
-                yt_url_result = None
-                bot_logger("MUSIC_YT_TIMEOUT", f"YouTube URL download timed out for: {query!r}")
-            if yt_url_result:
-                track = MusicTrack(
-                    title=yt_url_result["title"], file_path=yt_url_result["file_path"],
-                    duration=yt_url_result["duration"], is_video=False,
-                    thumbnail=yt_url_result.get("thumbnail"), source=yt_url_result["source"],
-                )
-                _stream_cache.put(query, track.title, track.file_path, track.duration,
-                                   False, track.thumbnail, track.source)
-                return track
+            bot_logger("MUSIC_YT_TIMEOUT", f"YouTube timed out (120s) for: {query!r}")
             return None
-        ts       = int(time.time() * 1000)
-        out_tmpl = os.path.join(MUSIC_CACHE, f"direct_{ts}.%(ext)s")
-        resolved = await music_sources.resolve_link(
-            query, out_tmpl, _YDL_COMMON, logger=bot_logger, want_video=False)
-        if resolved and not resolved.get("error"):
-            track = MusicTrack(
-                title=resolved["title"], file_path=resolved["file_path"],
-                duration=resolved["duration"], is_video=False,
-                thumbnail=resolved.get("thumbnail"), source=resolved["source"],
-            )
-            _stream_cache.put(query, track.title, track.file_path, track.duration,
-                               False, track.thumbnail, track.source)
-            return track
-        # fall through to the text-search race below only if the link
-        # didn't resolve at all (dead link, geo-block, unsupported host).
+        if not result:
+            return None
+        return MusicTrack(
+            title=result["title"], file_path=result["file_path"],
+            duration=result["duration"], is_video=False,
+            thumbnail=result.get("thumbnail"), source=result["source"],
+        )
 
-    # 1.5) YouTube pre-check — runs FIRST when cookies are active (primary path),
-    #      or as a parallel race entrant when no cookies.
-    #      BUG FIX: old 30s timeout cut off the client ladder mid-way.
-    #      With check_formats=False + webm-first format chain, each bad-client
-    #      attempt fails fast (≤15s socket_timeout) so the full ladder can
-    #      complete. Raise ceiling to 90s (cookies) / 45s (no cookies).
-    if not music_sources.is_url(query):
-        ets_yt   = int(time.time() * 1000)
-        yt_tmpl  = os.path.join(MUSIC_CACHE, f"audio_{ets_yt}_yt.%(ext)s")
-        _yt_timeout = 90.0 if _has_yt_cookies else 45.0
-        _yt_timeout_label = f"{int(_yt_timeout)}s"
-        try:
-            yt_result = await asyncio.wait_for(
-                music_sources.youtube_search_download(query, yt_tmpl, logger=bot_logger),
-                timeout=_yt_timeout,
-            )
-        except asyncio.TimeoutError:
-            yt_result = None
-            bot_logger("MUSIC_YT_TIMEOUT", f"YouTube pre-check timed out ({_yt_timeout_label}) for: {query!r}")
-        if yt_result:
-            track = MusicTrack(
-                title=yt_result["title"], file_path=yt_result["file_path"],
-                duration=yt_result["duration"], is_video=False,
-                thumbnail=yt_result.get("thumbnail"), source=yt_result["source"],
-            )
-            _stream_cache.put(query, track.title, track.file_path, track.duration,
-                               False, track.thumbnail, track.source)
-            return track
-
-    track = await _search_and_download_audio_core(query)
+    # 2) First attempt
+    track = await _yt_download("yt")
     if track:
         _stream_cache.put(query, track.title, track.file_path, track.duration,
-                           track.is_video, track.thumbnail, track.source)
+                           False, track.thumbnail, track.source)
         return track
 
-    # 2) Everything above failed. Clean up a messy query via the public,
-    #    key-free iTunes metadata search (mirrors the
-    #    Spotify/Apple/Deezer "metadata search -> alternate source match"
-    #    step from the fallback spec) and retry once with the cleaned title.
-    refined = await music_sources.refine_query_via_itunes(query, logger=bot_logger)
-    if refined and music_sources.normalize_query(refined) != music_sources.normalize_query(query):
-        bot_logger("MUSIC_REFINE", f"Retrying with refined query: {refined}")
-        track = await _search_and_download_audio_core(refined)
-        if track:
-            _stream_cache.put(query, track.title, track.file_path, track.duration,
-                               track.is_video, track.thumbnail, track.source)
-            return track
-
-    # 3) Last-resort retry. Every free source above is a public scraping
-    #    target — a transient network blip, a momentary 429/rate-limit, or
-    #    a slow DNS lookup on ONE attempt is common and unrelated to whether
-    #    the song actually exists. This is the other half of "sometimes
-    #    plays, sometimes doesn't": the exact same query can fail once and
-    #    succeed a few seconds later with zero code changes. Give the whole
-    #    pipeline one more shot after a short backoff before giving up.
-    await asyncio.sleep(1.5)
-    bot_logger("MUSIC_RETRY", f"All sources failed once — retrying query: {query!r}")
-    track = await _search_and_download_audio_core(query)
+    # 3) One retry after brief backoff (handles transient network blips)
+    bot_logger("MUSIC_RETRY", f"YouTube attempt 1 failed — retrying in 2s for: {query!r}")
+    await asyncio.sleep(2.0)
+    track = await _yt_download("yt2")
     if track:
         _stream_cache.put(query, track.title, track.file_path, track.duration,
-                           track.is_video, track.thumbnail, track.source)
+                           False, track.thumbnail, track.source)
         return track
+
+    bot_logger("MUSIC_DL_FAIL", f"YouTube failed for: {query!r}. Check YTDLP_COOKIES.")
     return None
 
 
 async def _search_and_download_audio_core(query: str):
-    """Race YouTube + JioSaavn + SoundCloud + Deezer + iTunes in parallel.
-
-    YouTube is the primary source — cookies give full DASH manifests and
-    reliable format selection.  On Heroku/cloud IPs YouTube often returns
-    "No video formats found!" even with valid cookies, so JioSaavn and
-    SoundCloud run simultaneously with a small stagger so the first working
-    source wins without waiting for YouTube to exhaust its client ladder.
-
-    BUG FIX (2026-08): sources list previously only contained YouTube.
-    When YouTube fails (Heroku cloud-IP block → "No video formats found!"),
-    there was zero fallback — song appeared to "not play" even though the
-    file-check passed. Fix: add JioSaavn (best for Hindi/Bollywood),
-    SoundCloud, Deezer preview, and iTunes preview as parallel race entrants.
-
-    Returns the first valid MusicTrack, or None if all fail.
-    """
-    ets = int(time.time() * 1000)   # source timestamp (avoids filename clashes)
-
-    # Hard per-source ceiling. Without this, one slow/hanging source (a
-    # scraper site that accepts the connection but never responds, a DNS
-    # lookup that never resolves, etc.) keeps its task in `pending` forever
-    # — the `while pending` race loop below then never finishes, so the
-    # bot just sits on "Searching..." forever, even though 12 other
-    # sources already failed. Every source gets a fixed timeout so its
-    # task ALWAYS completes (with a real result or None), which guarantees
-    # the overall race loop always terminates.
-    _SOURCE_TIMEOUT = 25
-
-    async def _extra_src(name, coro, delay=0.0):
-        """Wrap a music_sources coroutine; convert its dict -> MusicTrack.
-        `delay` implements the soft priority stagger described above."""
-        try:
-            if delay:
-                await asyncio.sleep(delay)
-            result = await asyncio.wait_for(coro, timeout=_SOURCE_TIMEOUT)
-            if not result:
-                return None
-            return MusicTrack(
-                title=result["title"],
-                file_path=result["file_path"],
-                duration=result["duration"],
-                is_video=False,
-                thumbnail=result.get("thumbnail"),
-                source=result["source"],
-            )
-        except Exception as e:
-            bot_logger("MUSIC_DL_ERR", f"[extra] {name}: {e}")
-            return None
-
-    # ── all sources, ordered by stated priority ─────────────────────────
-    # Stagger logic:
-    #   delay=0.0  → start immediately (highest priority)
-    #   delay=1.0  → start after 1s (run in parallel, slight preference to above)
-    #   delay=2.0  → last resort (preview-only sources like iTunes)
-    #
-    # On Heroku cloud IPs YouTube usually takes 15-30s to exhaust its client
-    # ladder before failing.  JioSaavn/SoundCloud typically respond in 3-8s —
-    # with delay=0 they win the race long before YouTube gives up.
-    _SOURCE_TIMEOUT = 25
-    sources = [
-        # YouTube: primary — authenticated via cookies, full DASH manifest.
-        ("youtube", music_sources.youtube_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_yt2.%(ext)s"),
-            bot_logger), 0.0),
-
-        # JioSaavn: best for Hindi/Bollywood/Indian-regional — public API,
-        # no login, full songs, works from any IP including Heroku.
-        ("jiosaavn", music_sources.jiosaavn_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_jio.%(ext)s"),
-            bot_logger), 0.0),
-
-        # SoundCloud: strong for English/indie — direct SC API v2 path,
-        # routes through SoundCloud CDN (not YouTube), works from cloud IPs.
-        ("soundcloud", music_sources.soundcloud_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_sc.%(ext)s"),
-            _YDL_COMMON, bot_logger), 1.0),
-
-        # Deezer 30-s preview: global coverage, works from all IPs.
-        ("deezer", music_sources.deezer_preview_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_dz.%(ext)s"),
-            bot_logger), 1.0),
-
-        # iTunes 30-s preview: last resort — virtually every commercial
-        # track globally including all Bollywood. 30 s is better than silence.
-        ("itunes", music_sources.itunes_preview_search_download(
-            query, os.path.join(MUSIC_CACHE, f"audio_{ets}_it.%(ext)s"),
-            bot_logger), 2.0),
-    ]
-
-    # ── parallel race ────────────────────────────────────────────────────
-    async def _safe(name, coro):
-        try:
-            return await coro
-        except asyncio.CancelledError:
-            return None
-        except Exception as exc:
-            bot_logger("MUSIC_DL_ERR", f"[race] {name}: {exc}")
-            return None
-
-    tasks   = {asyncio.create_task(_safe(name, _extra_src(name, coro, delay))): name
-               for name, coro, delay in sources}
-    pending = set(tasks)
-    winner  = None
-
-    while pending:
-        done, pending = await asyncio.wait(
-            pending, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            try:
-                result = task.result()
-            except Exception:
-                result = None
-            if result is not None and winner is None:
-                winner = result
-                bot_logger("MUSIC_DL",
-                           f"Winner: {tasks[task]} → {result.title!r}")
-                for p in pending:
-                    p.cancel()
-                if pending:
-                    await asyncio.gather(*pending, return_exceptions=True)
-                pending = set()
-                break
-
-    return winner
+    """Removed — bot now uses YouTube-only via search_and_download_audio.
+    Kept as a stub so any lingering call sites return None gracefully."""
+    return None
 
 
 async def search_and_download_video(query: str):
+    """Download video from YouTube using cookies (YTDLP_COOKIES env var).
+
+    Strictly YouTube-only — mirrors the working Musicbot pattern.
+    YTDLP_COOKIES must be set on Heroku (Netscape format).
+
+    Flow:
+      1. Stream cache
+      2. YouTube video download via music_sources.youtube_video_download()
+      3. One retry after 2 s if the first attempt fails
+    """
     if not YTDLP_AVAILABLE:
         return None
 
@@ -2146,92 +1957,47 @@ async def search_and_download_video(query: str):
             thumbnail=cached.get("thumbnail"), source=cached["source"],
         )
 
-    # Any pasted URL — YouTube links go through youtube_video_download,
-    # everything else (direct mp4, m3u8/HLS, etc.) through resolve_link.
-    if music_sources.is_url(query):
-        if music_sources.is_youtube_url(query):
-            ets_yturl = int(time.time() * 1000)
-            ytv_url_tmpl = os.path.join(MUSIC_CACHE, f"video_{ets_yturl}_yturl.%(ext)s")
-            ytv_url_result = await music_sources.youtube_video_download(
-                query, ytv_url_tmpl, logger=bot_logger)
-            if ytv_url_result:
-                track = MusicTrack(
-                    title=ytv_url_result["title"], file_path=ytv_url_result["file_path"],
-                    duration=ytv_url_result["duration"], is_video=True,
-                    thumbnail=ytv_url_result.get("thumbnail"), source=ytv_url_result["source"],
-                )
-                _stream_cache.put(f"video::{query}", track.title, track.file_path,
-                                   track.duration, True, track.thumbnail, track.source)
-                return track
+    async def _ytv_download(suffix: str) -> MusicTrack | None:
+        ets  = int(time.time() * 1000)
+        tmpl = os.path.join(MUSIC_CACHE, f"video_{ets}_{suffix}.%(ext)s")
+        try:
+            result = await asyncio.wait_for(
+                music_sources.youtube_video_download(query, tmpl, logger=bot_logger),
+                timeout=120.0,
+            )
+        except asyncio.TimeoutError:
+            bot_logger("MUSIC_YT_TIMEOUT", f"YouTube video timed out (120s) for: {query!r}")
             return None
-        ts       = int(time.time() * 1000)
-        out_tmpl = os.path.join(MUSIC_CACHE, f"video_{ts}.%(ext)s")
-        resolved = await music_sources.resolve_link(
-            query, out_tmpl, _YDL_COMMON, logger=bot_logger, want_video=True)
-        if resolved and not resolved.get("error"):
-            track = MusicTrack(
-                title=resolved["title"], file_path=resolved["file_path"],
-                duration=resolved["duration"], is_video=True,
-                thumbnail=resolved.get("thumbnail"), source=resolved["source"],
-            )
-            _stream_cache.put(f"video::{query}", track.title, track.file_path,
-                               track.duration, True, track.thumbnail, track.source)
-            return track
+        if not result:
+            return None
+        return MusicTrack(
+            title=result["title"], file_path=result["file_path"],
+            duration=result["duration"], is_video=True,
+            thumbnail=result.get("thumbnail"), source=result["source"],
+        )
 
-    # 1.5) Try YouTube video first
-    if not music_sources.is_url(query):
-        ets_ytv   = int(time.time() * 1000)
-        ytv_tmpl  = os.path.join(MUSIC_CACHE, f"video_{ets_ytv}_yt.%(ext)s")
-        ytv_result = await music_sources.youtube_video_download(query, ytv_tmpl, logger=bot_logger)
-        if ytv_result:
-            track = MusicTrack(
-                title=ytv_result["title"], file_path=ytv_result["file_path"],
-                duration=ytv_result["duration"], is_video=True,
-                thumbnail=ytv_result.get("thumbnail"), source=ytv_result["source"],
-            )
-            _stream_cache.put(f"video::{query}", track.title, track.file_path,
-                               track.duration, True, track.thumbnail, track.source)
-            return track
-
-    track = await _search_and_download_video_core(query)
+    track = await _ytv_download("ytv")
     if track:
         _stream_cache.put(f"video::{query}", track.title, track.file_path,
                            track.duration, True, track.thumbnail, track.source)
         return track
 
-    refined = await music_sources.refine_query_via_itunes(query, logger=bot_logger)
-    if refined and music_sources.normalize_query(refined) != music_sources.normalize_query(query):
-        bot_logger("MUSIC_REFINE", f"Retrying video with refined query: {refined}")
-        track = await _search_and_download_video_core(refined)
-        if track:
-            _stream_cache.put(f"video::{query}", track.title, track.file_path,
-                               track.duration, True, track.thumbnail, track.source)
-            return track
+    bot_logger("MUSIC_RETRY", f"YouTube video attempt 1 failed — retrying in 2s for: {query!r}")
+    await asyncio.sleep(2.0)
+    track = await _ytv_download("ytv2")
+    if track:
+        _stream_cache.put(f"video::{query}", track.title, track.file_path,
+                           track.duration, True, track.thumbnail, track.source)
+        return track
+
+    bot_logger("MUSIC_DL_FAIL", f"YouTube video failed for: {query!r}. Check YTDLP_COOKIES.")
     return None
 
 
 async def _search_and_download_video_core(query: str):
-    """Text-query video search with YouTube removed. There is no equally
-    strong free/no-login general video-search API to replace it with, so
-    this searches Internet Archive's public video library (movies, TV,
-    educational/public-domain clips) as the best-effort text-search path.
-    For anything else, users should reply to a video message (handled by
-    download_tagged_media) or paste a direct video link (handled above in
-    search_and_download_video via resolve_link)."""
-    ts       = int(time.time() * 1000)
-    out_tmpl = os.path.join(MUSIC_CACHE, f"video_{ts}_ia.%(ext)s")
-    result = await music_sources.archive_org_video_search_download(
-        query, out_tmpl, logger=bot_logger)
-    if not result:
-        return None
-    return MusicTrack(
-        title=result["title"],
-        file_path=result["file_path"],
-        duration=result["duration"],
-        is_video=True,
-        thumbnail=result.get("thumbnail"),
-        source=result["source"],
-    )
+    """Removed — bot now uses YouTube-only via search_and_download_video.
+    Kept as a stub so any lingering call sites return None gracefully."""
+    return None
 
 
 
