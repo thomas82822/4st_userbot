@@ -2241,6 +2241,72 @@ async def download_tagged_media(event):
             return None
     return None
 
+async def _find_telethon_client(user_id: int):
+    """Return the already-connected Telethon client object logged in as
+    `user_id` (the userbot's primary client or one of its extra multi-account
+    sessions), or None if none matches. `get_me()` is answered from Telethon's
+    own local cache after the first call, so this is not a network round trip
+    on repeat invocations."""
+    for cl in [userbot] + extra_clients:
+        try:
+            if not cl.is_connected():
+                continue
+            me = await cl.get_me()
+            if me and me.id == user_id:
+                return cl
+        except Exception:
+            continue
+    return None
+
+
+async def _seed_music_peer_cache(chat_id: int, session_user_id: int) -> None:
+    """ROOT FIX for music silently failing to play (".play" does nothing,
+    no song, no error the user can see).
+
+    Root cause: each userbot account plays music through its OWN, separate
+    Pyrogram session (`cfg["PYRO_SESSIONS"]`) — a fresh MTProto login that
+    has never itself joined or seen most chats the Telethon userbot account
+    is active in. Pyrogram/pyrofork only knows a chat's `access_hash` if it
+    has resolved that peer before (dialog sync, join, or a prior message).
+    With an empty cache, PyTgCalls' own internal calls it makes before
+    streaming — `channels.GetChannels` / `phone.CreateGroupCall` /
+    `phone.JoinGroupCall` — all fail with CHANNEL_INVALID / PEER_ID_INVALID.
+    That exception is generic (often with an empty message), so it silently
+    falls through every retry strategy in `music_play_track` and just
+    reports "generic" failure — from the user's side: music never plays.
+
+    Fix: the Telethon client for this same account IS an active member of
+    the chat (it just received the .play command from it) and already has
+    a valid, resolved InputPeerChannel/InputPeerChat with the correct
+    access_hash in its own local entity cache. Copy that access_hash
+    straight into the Pyrogram session's peer storage so PyTgCalls can
+    resolve the peer locally, with no network round trip of its own needed.
+    """
+    pyro = _get_session_pyro(session_user_id)
+    if not pyro:
+        return
+    telethon_cl = await _find_telethon_client(session_user_id)
+    if not telethon_cl:
+        return
+    try:
+        from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser
+        peer = await telethon_cl.get_input_entity(chat_id)
+        if isinstance(peer, InputPeerChannel):
+            await pyro.storage.update_peers(
+                [(peer.channel_id, peer.access_hash, "channel", None, None)]
+            )
+        elif isinstance(peer, InputPeerChat):
+            await pyro.storage.update_peers(
+                [(peer.chat_id, 0, "chat", None, None)]
+            )
+        elif isinstance(peer, InputPeerUser):
+            await pyro.storage.update_peers(
+                [(peer.user_id, peer.access_hash, "user", None, None)]
+            )
+    except Exception as e:
+        bot_logger("MUSIC_PLAY_ERR", f"Peer cache seed failed for {chat_id}: {e}")
+
+
 async def _try_create_group_call(chat_id: int, session_user_id: int) -> bool:
     """The group has no active voice/video chat at all — pytgcalls can only
     JOIN an existing one, not conjure one out of thin air. If the userbot
@@ -2250,6 +2316,7 @@ async def _try_create_group_call(chat_id: int, session_user_id: int) -> bool:
     pyro = _get_session_pyro(session_user_id)
     if not pyro:
         return False
+    await _seed_music_peer_cache(chat_id, session_user_id)
     try:
         from pyrogram.raw import functions as _raw_functions
         peer = await pyro.resolve_peer(chat_id)
@@ -2292,6 +2359,12 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
     tgcalls = _get_session_pytgcalls(session_user_id)
     if not PYTGCALLS_AVAILABLE or not tgcalls:
         return False, "generic"
+    # ROOT FIX: seed this account's Pyrogram peer cache for `chat_id` before
+    # PyTgCalls touches it — see `_seed_music_peer_cache` docstring. Only
+    # needed once per (account, chat) pair in practice, but update_peers()
+    # is a cheap local write so re-seeding on every play() is harmless and
+    # also self-heals a stale/expired access_hash.
+    await _seed_music_peer_cache(chat_id, session_user_id)
     source = track.playback_source()
     if not source:
         bot_logger("MUSIC_PLAY_ERR", "No playable source (no file_path/stream_url) on track.")
