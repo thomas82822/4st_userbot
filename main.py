@@ -2419,6 +2419,7 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
         # a value causes immediate format detection failures, which show up
         # as empty-string exceptions from PyTgCalls.
         if track.is_zero_disk():
+            # HTTP/CDN stream: reconnect flags needed; large probesize for format detection
             _ffmpeg_in_flags = (
                 "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
                 "-probesize 5000000 -analyzeduration 5000000 "
@@ -2426,10 +2427,13 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36\\r\\n'"
             )
         else:
-            _ffmpeg_in_flags = (
-                "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
-                "-probesize 32 -analyzeduration 0"
-            )
+            # BUG FIX: LOCAL FILE — do NOT pass -reconnect/-reconnect_streamed.
+            # These flags are for HTTP streams only. Passing -reconnect_streamed
+            # to a local file path causes FFmpeg to hang indefinitely waiting
+            # for a non-existent network reconnect event, freezing the voice chat.
+            # yt-dlp downloads to a local temp file on Heroku (CDN is IP-blocked),
+            # so this branch is the NORMAL path on every Heroku play() call.
+            _ffmpeg_in_flags = "-probesize 32 -analyzeduration 0"
         if track.is_video:
             stream = MediaStream(
                 source,
@@ -2438,20 +2442,14 @@ async def music_play_track(chat_id: int, track: MusicTrack, session_user_id: int
                 ffmpeg_parameters=_ffmpeg_in_flags,
             )
         else:
-            # Audio-only tracks still carry a (small, static) video frame in
-            # some players — keep it modest since there's nothing to see,
-            # but push audio to studio quality since that's all that matters.
-            # AudioQuality.STUDIO already drives PyTgCalls' own internal
-            # 48kHz Opus WebRTC encoder — forcing ffmpeg to ALSO re-encode
-            # its output to an Opus container (as the original brief's
-            # `-acodec libopus -f opus` flags would) would corrupt the raw
-            # PCM pipe PyTgCalls expects between ffmpeg and its own encoder,
-            # producing silent/garbled audio. STUDIO quality is the correct
-            # equivalent for this pipeline.
+            # BUG FIX: Audio-only streams MUST NOT include video_parameters.
+            # Setting VideoQuality on an audio-only track makes PyTgCalls set up
+            # a video encoder pipeline that has no frames to consume — it hangs
+            # waiting for video data that never arrives, causing the stream to
+            # stall silently. STUDIO audio quality is all we need here.
             stream = MediaStream(
                 source,
                 audio_parameters=AudioQuality.STUDIO,
-                video_parameters=VideoQuality.SD_360p,
                 ffmpeg_parameters=_ffmpeg_in_flags,
             )
         # ── Silence-frame injection (skip-mode only) ─────────────────────

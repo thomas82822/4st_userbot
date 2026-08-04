@@ -1,7 +1,18 @@
 telethon==1.36.0
-pyrofork>=2.3.55,<3.0.0
+
+# BUG FIX: pyrofork from GitHub (not PyPI).
+# PyPI pyrofork may lag behind and miss InputGroupCallSlug + other types
+# that pytgcalls 2.3+ requires. GitHub HEAD is always current.
+git+https://github.com/Mayuri-Chan/pyrofork.git
+
 tgcrypto==1.2.5
-py-tgcalls==2.3.3
+
+# BUG FIX: pytgcalls from GitHub main branch (ntgcalls backend).
+# PyPI py-tgcalls pinned to an old version uses the legacy tgcalls backend
+# which is NOT compatible with Python 3.12 (Heroku-26 stack). GitHub main
+# uses ntgcalls — fully Python 3.12 compatible and has latest VC fixes.
+git+https://github.com/pytgcalls/pytgcalls.git
+
 yt-dlp[default,curl-cffi]>=2026.7.4
 google-genai>=0.1.0
 aiohttp>=3.9.0
