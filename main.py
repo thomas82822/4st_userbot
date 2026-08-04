@@ -21,8 +21,21 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="google")
 # and PyTgCalls can't find ffmpeg/ffprobe.  We patch it here at import-time
 # so every downstream library (yt-dlp, PyTgCalls, subprocess calls) gets the
 # correct binary automatically.
+# ROOT-CAUSE FIX: bin/post_compile downloads a static ffmpeg+ffprobe build to
+# vendor/ffmpeg/bin *inside the slug* (BUILD_DIR/vendor/ffmpeg/bin, i.e.
+# /app/vendor/ffmpeg/bin at runtime) as the primary, always-present install
+# method — it does not depend on the heroku-community/apt buildpack being
+# attached to the app (app.json buildpacks only apply to "Deploy to Heroku"
+# button installs, NOT to a manual `git push heroku`). This path was missing
+# from the search list, so on deploys without the apt buildpack manually
+# added, detection fell through to the 5s `find /app /usr` scan below, which
+# can time out on a busy dyno (bgutil's vendored node_modules alone can make
+# a plain `find` scan slower than 5s) and silently leave ffmpeg "not found"
+# even though it was sitting right there in vendor/ffmpeg/bin.
 _FFMPEG_SEARCH_PATHS = [
-    "/app/.apt/usr/bin",          # Heroku apt buildpack (primary)
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "ffmpeg", "bin"),
+    "/app/vendor/ffmpeg/bin",     # post_compile static build (primary, no buildpack needed)
+    "/app/.apt/usr/bin",          # Heroku apt buildpack (secondary, needs Aptfile + buildpack)
     "/usr/local/bin",
     "/usr/bin",
     "/bin",
@@ -66,6 +79,25 @@ if _FFMPEG_BIN:
     os.environ["FFMPEG_BINARY"] = _FFMPEG_BIN
     if _FFPROBE_BIN:
         os.environ["FFPROBE_BINARY"] = _FFPROBE_BIN
+
+# LAST-RESORT FALLBACK: if nothing above found a working ffmpeg/ffprobe
+# (vendor build missing, apt buildpack not attached, filesystem scan timed
+# out), use the `static-ffmpeg` PyPI package. It ships its own portable
+# binaries and downloads them into its own cache on first run, so it works
+# even if the Heroku build step that installs ffmpeg never ran or failed.
+if not (_FFMPEG_BIN and _FFPROBE_BIN):
+    try:
+        import static_ffmpeg as _static_ffmpeg
+        _static_ffmpeg.add_paths()  # prepends its cached binaries dir to PATH
+        _FFMPEG_BIN = _FFMPEG_BIN or shutil.which("ffmpeg")
+        _FFPROBE_BIN = _FFPROBE_BIN or shutil.which("ffprobe")
+        if _FFMPEG_BIN:
+            os.environ["FFMPEG_BINARY"] = _FFMPEG_BIN
+        if _FFPROBE_BIN:
+            os.environ["FFPROBE_BINARY"] = _FFPROBE_BIN
+    except Exception:
+        pass  # static-ffmpeg not installed or download failed; music features
+              # that need ffmpeg will fall back to no-postprocessing mode.
 # ─────────────────────────────────────────────────────────────────────────────
 
 GENAI_AVAILABLE = False

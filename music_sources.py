@@ -94,9 +94,17 @@ from contextlib import asynccontextmanager
 # 1. shutil.which() — uses current PATH (Heroku .profile.d may already set it)
 # 2. Hardcoded Heroku/common paths
 # 3. env-var fallback (set by main.py's own detection pass)
+# ROOT-CAUSE FIX: bin/post_compile installs ffmpeg to vendor/ffmpeg/bin inside
+# the slug (/app/vendor/ffmpeg/bin at runtime) — this is the primary install
+# path and does not need the apt buildpack attached at all. It was missing
+# here, so on deploys without heroku-community/apt manually added, ffmpeg
+# detection depended entirely on the 5s filesystem `find` scan below, which
+# can time out before it reaches vendor/ffmpeg/bin on a loaded dyno.
 _MS_FFMPEG_EXTRA_DIRS = [
-    "/app/.apt/usr/bin",   # Heroku apt buildpack
-    "/app/bin",            # Heroku alt
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "ffmpeg", "bin"),
+    "/app/vendor/ffmpeg/bin",   # post_compile static build (primary, no buildpack needed)
+    "/app/.apt/usr/bin",        # Heroku apt buildpack (secondary)
+    "/app/bin",                 # Heroku alt
     "/usr/local/bin",
     "/usr/bin",
     "/bin",
@@ -141,8 +149,39 @@ if _MS_FFMPEG_DIR:
 
 # Helper — merge into any yt-dlp opts dict so yt-dlp always knows where ffmpeg is
 def _ffmpeg_opts() -> dict:
-    """Return ``{"ffmpeg_location": dir}`` if we found ffmpeg, else empty dict."""
-    return {"ffmpeg_location": _MS_FFMPEG_DIR} if _MS_FFMPEG_DIR else {}
+    """Return ``{"ffmpeg_location": dir}`` if we found ffmpeg, else
+    ``{"fixup": "never"}``.
+
+    BUG FIX: yt-dlp runs its own automatic "fixup" postprocessors (e.g.
+    FixupM4a, FixupM3u8) based on the downloaded format, *regardless* of
+    whatever is passed in the "postprocessors" opt — even ``postprocessors:
+    []`` does not suppress them. Those fixups still shell out to ffmpeg, so
+    without this, a missing ffmpeg install surfaces as "Postprocessing:
+    ffprobe and ffmpeg not found" even when our own FFmpegExtractAudio step
+    was correctly skipped. fixup="never" disables that automatic pass.
+    """
+    if _MS_FFMPEG_DIR:
+        return {"ffmpeg_location": _MS_FFMPEG_DIR}
+    return {"fixup": "never"}
+
+def _audio_pp(codec: str = "mp3", quality: str = "192") -> dict:
+    """Return the yt-dlp opts needed to extract to an audio codec, but only
+    if ffmpeg is actually available. If not, skip the FFmpegExtractAudio
+    postprocessor (yt-dlp writes the raw m4a/opus/webm instead, which
+    PyTgCalls plays fine) and disable auto-fixups so yt-dlp doesn't crash
+    trying to invoke a nonexistent ffmpeg anyway. Merge into opts with
+    ``**_audio_pp(...)``.
+    """
+    if not _MS_FFMPEG_DIR:
+        return {"postprocessors": [], "fixup": "never"}
+    return {
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": codec,
+            "preferredquality": quality,
+        }],
+        "ffmpeg_location": _MS_FFMPEG_DIR,
+    }
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── YouTube cookie support via env var ───────────────────────────────────────
@@ -552,11 +591,9 @@ async def soundcloud_search_download(query: str, out_tmpl: str, ydl_common: dict
         def _ydl_fallback():
             opts = {
                 **ydl_common,
-                **_ffmpeg_opts(),
                 "format": "bestaudio/best",
                 "outtmpl": out_tmpl,
-                "postprocessors": [{"key": "FFmpegExtractAudio",
-                                    "preferredcodec": "mp3", "preferredquality": "192"}],
+                **_audio_pp("mp3", "192"),
             }
             opts.pop("cookiefile", None)
             try:
@@ -1031,11 +1068,7 @@ async def bandcamp_search_download(query: str, out_tmpl: str, logger=None):
             "format": "bestaudio/best",
             "outtmpl": out_tmpl,
             "noplaylist": True,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }],
+            **_audio_pp("mp3", "320"),
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -1107,11 +1140,7 @@ async def mixcloud_search_download(query: str, out_tmpl: str, logger=None):
             "format": "bestaudio/best",
             "outtmpl": out_tmpl,
             "noplaylist": True,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }],
+            **_audio_pp("mp3", "320"),
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=True)
@@ -1657,11 +1686,7 @@ async def generic_yt_dlp_url_download(url: str, out_tmpl: str, ydl_common: dict,
             opts["merge_output_format"] = "mp4"
         else:
             opts["format"] = "bestaudio/best"
-            opts["postprocessors"] = [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }]
+            opts.update(_audio_pp("mp3", "320"))
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
             if isinstance(info, dict) and "entries" in info:
@@ -3690,11 +3715,11 @@ def _yt_base_opts(out_tmpl: str, client: str, fmt: str) -> dict:
         # play(). Producing Opus directly here skips that extra transcode
         # generation, which cuts CPU/RAM per track and shaves startup
         # latency versus the old "always MP3" pipeline.
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "opus",
-            "preferredquality": "192",  # good headroom above Telegram VC's ceiling
-        }],
+        # BUG FIX: only ask ffmpeg to do this if it's actually available —
+        # otherwise yt-dlp's automatic fixup postprocessors still try to
+        # invoke a nonexistent ffmpeg and crash with "ffprobe and ffmpeg
+        # not found", even though our own postprocessor list is empty.
+        **_audio_pp("opus", "192"),  # good headroom above Telegram VC's ceiling
         # FFmpeg reconnect + low-latency flags (techniques #27-29, jugad #6):
         # nobuffer/low_delay/tiny probesize shrink startup latency so a
         # track begins streaming to the voice chat almost immediately
@@ -3942,8 +3967,7 @@ async def _yt_try_invidious(video_id: str, out_tmpl: str, logger=None) -> dict |
                 "format": "bestaudio/best",
                 "outtmpl": out_tmpl,
                 "retries": 2,
-                "postprocessors": [{"key": "FFmpegExtractAudio",
-                                    "preferredcodec": "mp3", "preferredquality": "256"}],
+                **_audio_pp("mp3", "256"),
                 "external_downloader_args": {"ffmpeg_i": ["-reconnect", "1",
                     "-reconnect_streamed", "1", "-reconnect_delay_max", "5"]},
             }

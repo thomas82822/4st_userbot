@@ -10,3 +10,6 @@ pillow>=10.0.0
 pycryptodome>=3.18.0
 python-dotenv>=1.0.0
 requests>=2.31.0
+
+# FFmpeg Python fallback — used if vendor/apt ffmpeg install is missing
+static-ffmpeg
