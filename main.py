@@ -3318,14 +3318,18 @@ async def _asst_callback_inner(event, data, sender_id, owner_id, is_owner):
     elif data == b"reboot":
         if not is_owner:
             return
+        # BUG FIX: pass buttons=[] to clear all menu buttons before reboot.
+        # Without this, the old start-menu buttons stay visible on the message
+        # after the bot restarts (Telethon keeps existing buttons when buttons=None).
         await _safe_bot_edit(event, sender_id,
-            "<blockquote>♻️ <b>Rebooting all cores...</b></blockquote>")
+            "<blockquote>♻️ <b>Rebooting all cores...</b></blockquote>", buttons=[])
         await asyncio.sleep(1)
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
     elif data == b"reboot_mine":
+        # BUG FIX: same — clear buttons so they don't linger after reboot.
         await _safe_bot_edit(event, sender_id,
-            "<blockquote>♻️ <b>Rebooting...</b></blockquote>")
+            "<blockquote>♻️ <b>Rebooting...</b></blockquote>", buttons=[])
         await asyncio.sleep(1)
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
@@ -7269,6 +7273,15 @@ async def main():
     except Exception as e:
         bot_logger("USERBOT_ERROR", f"Primary userbot failed: {e}")
 
+    # BUG FIX: deduplicate SAVED_STRINGS before deploying to prevent duplicate
+    # clients spawning on every reboot (GitHub backup restore can re-introduce
+    # strings already present; list(set()) loses order so use dict.fromkeys).
+    _raw_strings = cfg.get("SAVED_STRINGS", [])
+    _deduped = list(dict.fromkeys(s for s in _raw_strings if s))
+    if len(_deduped) != len(_raw_strings):
+        bot_logger("BOOT", f"Deduped SAVED_STRINGS: {len(_raw_strings)} → {len(_deduped)}")
+        cfg["SAVED_STRINGS"] = _deduped
+        save_config(cfg)
     # Deploy all saved extra sessions
     for s in list(cfg.get("SAVED_STRINGS", [])):
         asyncio.create_task(deploy_new_session_string(s, is_startup=True))

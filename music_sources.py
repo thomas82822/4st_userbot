@@ -3355,8 +3355,12 @@ def _cloud_download_sync(
             "extractor_args": ext_args,
             **_get_js_runtime_opts(),
             **_get_impersonate_opt(),
+            **_ffmpeg_opts(),   # BUG FIX: ffprobe/ffmpeg not found error — pass location for postprocessing
         }
-        if cookie and not use_player_skip:
+        # BUG FIX: always inject cookies when available — even for tv_embedded/android_vr
+        # with player_skip. YouTube now bot-checks these clients from cloud IPs regardless
+        # of player_skip, so valid cookies are required to pass the gate.
+        if cookie:
             opts["cookiefile"] = cookie
 
         # Capture yt-dlp stderr for debug logging
