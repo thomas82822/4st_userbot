@@ -111,6 +111,19 @@ def _ms_find_bin(name: str) -> str | None:
         p = os.path.join(d, name)
         if os.path.isfile(p) and os.access(p, os.X_OK):
             return p
+    # HEROKU FIX: worker dynos skip .profile.d so /app/.apt/usr/bin is never
+    # added to PATH. Use subprocess find to scan the filesystem at runtime.
+    try:
+        result = subprocess.run(
+            ["find", "/app", "/usr", "-name", name, "-type", "f", "-maxdepth", "8"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line and os.path.isfile(line) and os.access(line, os.X_OK):
+                return line
+    except Exception:
+        pass
     return None
 
 _MS_FFMPEG_BIN  = (_ms_find_bin("ffmpeg")  or
@@ -3302,8 +3315,11 @@ def _cloud_download_sync(
     # PO-token because cloud IPs can't acquire PO-token from the webpage.
     combos = [
         # (fmt, clients, use_player_skip)
+        # android_vr removed: YouTube blocks it on cloud/Heroku IPs with
+        # "Failed to extract any player response". mweb bypasses the cloud-IP
+        # bot-check more reliably.
         ("bestaudio/best",                    ["tv_embedded"],       True),
-        ("bestaudio/best",                    ["android_vr"],        True),
+        ("bestaudio/best",                    ["mweb"],              True),
     ]
     if cookie:
         combos += [
@@ -3347,11 +3363,13 @@ def _cloud_download_sync(
                 ),
                 "Referer": "https://www.youtube.com/",
             },
-            "postprocessors": [{
+            # HEROKU FIX: if ffmpeg wasn't detected at startup (_MS_FFMPEG_DIR is None),
+            # skip FFmpegExtractAudio — yt-dlp writes raw m4a/opus/webm which PyTgCalls plays fine.
+            "postprocessors": ([{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "opus",
                 "preferredquality": "192",
-            }],
+            }] if _MS_FFMPEG_DIR else []),
             "extractor_args": ext_args,
             **_get_js_runtime_opts(),
             **_get_impersonate_opt(),
