@@ -3330,7 +3330,17 @@ def _cloud_download_sync(
         ("bestaudio/best",                    ["default"],           False),
     ]
 
+    # HEROKU FIX: when ffmpeg not found, override format to pre-packaged audio.
+    # "bestaudio/best" can pick DASH separate streams that need FFmpegMergerPP —
+    # yt-dlp adds that automatically, causing crash even with postprocessors=[].
+    # m4a/opus/webm/mp4 are single-file containers — no merge, no ffmpeg needed.
+    _NO_FFMPEG_FMT = (
+        "bestaudio[ext=m4a]/bestaudio[ext=opus]/bestaudio[ext=webm]"
+        "/best[ext=mp4]/best[ext=webm]/best"
+    )
+
     for fmt, clients, use_player_skip in combos:
+        actual_fmt = fmt if _MS_FFMPEG_DIR else _NO_FFMPEG_FMT
         yt_ext: dict = {"player_client": clients}
         if use_player_skip:
             # player_skip=["webpage"] bypasses the "Sign in to confirm" gate
@@ -3342,7 +3352,7 @@ def _cloud_download_sync(
             ext_args["youtubepot-bgutilscript"] = {"server_home": [_BGUTIL_SERVER_HOME]}
 
         opts: dict = {
-            "format":           fmt,
+            "format":           actual_fmt,
             "outtmpl":          out_tmpl,
             "quiet":            False,   # ← keep stderr for debug logging below
             "no_warnings":      False,
@@ -3417,7 +3427,7 @@ def _cloud_download_sync(
             logger("MUSIC_DL_ERR", f"cloud_dl [{clients}] ydl-errors: {'; '.join(_ydl_error[-3:])[:300]}")
 
         if info:
-            for ext in ("opus", "mp3", "m4a", "webm", "ogg"):
+            for ext in ("opus", "mp3", "m4a", "webm", "ogg", "mp4"):
                 p = out_tmpl.replace("%(ext)s", ext)
                 if os.path.exists(p) and os.path.getsize(p) > 4096:
                     logger("MUSIC_DL", f"cloud_dl ✓ [{clients}] '{(info.get('title',''))[:50]}'")
