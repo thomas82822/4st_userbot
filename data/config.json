@@ -15,7 +15,7 @@
         "ow": 0.1,
         "spam": 0.1,
         "rraid": 0.1,
-        "tagall": 1.5,
+        "tagall": 0.1,
         "onetag": 1.5,
         "ghost": 0.1,
         "sraid": 0.5
@@ -60,8 +60,7 @@
         "1BVtsOIwBu7SoDNLSVbFxR0eiEMvMlMQsHhQB1OCcVdWkEVxZGCgXon3efC26Mzki7wZFqJKC7pTPDrm6gaSs2Sgh2XNGCccY9cmzTERCVmnwvdt5em1RA0NBNsY8l_QeIqjNC48zup6R6fCPPPUBXl82SJl4y7pbsm4QtQE8uN8otvL1RgGSAfD3f7TMF6p6J58xiZB5ngW-J82F-1QBljenW-vYfqFZ28z5x9GJ4yz724Pftpv8Ks7cxG-smR-xmzs0g14V9UpITwt_D6xpgxnhHFpm61VUH4xoarqgFhVIEHB05VUNBmzAwSzcDNlD9KMWKCNnUK7IH3T3HyBBqpqr7zezcfQ=",
         "1AZWarzoBu0tmW_UZ9-vCc9QnxqvmklwGYTsGJS8xWyL5XarF4_c-iN9ToebIOk6hEy3GmseV00Kt7flu2yoJoRpfWy0Dr7okex7linYWtFvKObNG83Rm5smQFX39EneIdJpLpPgc0C9Sx_4f-x4JhlnlVjXBirl00PQIeyGHg4sjhRPFVOGGrqoLWzQU73MJ7H3HU2WzeRrhg0aoEOuzxpf-gJ7iTD760dtESs6yHtO_23_eaCeAW9HWYhFa9KmE2EqmXKHYaI8iJurx9i35X7jVg91ccw_KO_jw1HEFhpdnegVBqLeGmTipQGNn3c8VaacRdRSu-7ljfkdMMVqvdmcMaYE82Nk=",
         "1BVtsOGwBu76w81b1u2IW8TT8Z0bJkSjrp6lLwS3zZsTpOHtk7t9a5sNgQuDU0d04cTz1-1DJIN4x9FmUeWXoK6STwXwZ_JYHFz0YsKxND5ysVWHsIA1r05OowIi9sYESayVnfgJAK5Bl7w1HJpuH-wzitRkfMrAghT_MOR_haWkvKqlTyuBCMCj89COyUSBiHOhLCgAtp5JdaKheOijbqk2Go3bLA9JZTo9DQrAuNSAxhNgVHoo_9SprqDN-wXF8He-8Hjq9HpiFkZzEEtQ58ZplqLyIV9ACeF-HwK7cR7UTwzch_9tmS6diFyR0orQ5yfLd9hv9gaxbitjyZ4NWI9DlUipZuBY=",
-        "1BVtsOIgBu7dBIBL-LUNAt_WGv5dh8Tmpa9fLYqp_fSyAT-qS8Ab_W3oHk14D1T35Fcm9xRBpA9775bZAFmtOPh7fovq6wVQPpwTPTWFgVvHrYvRAXYnNKB8D6FaNMxnhYHp5UaYr_7Dr9q9beZjszNDzbavdokamaUtdgpjm0Q0d4KcfNaneqZ16N8EXUY-jA5a0Z6-zGioTiWDsGcvPnXTZ4mJr9fowrONSCQaZJz4fJo2ph3aTWsWIy56XRysb1neyqiWGRaJQqN9G8Y9kinI0jgkyM3qlMgA38QrFt7ABxeEy5DlTBXjQ8TFoDOX8MCMqh53soIOtTc5s2ua9utWThgxAfXA=",
-        "/start"
+        "1BVtsOIgBu7dBIBL-LUNAt_WGv5dh8Tmpa9fLYqp_fSyAT-qS8Ab_W3oHk14D1T35Fcm9xRBpA9775bZAFmtOPh7fovq6wVQPpwTPTWFgVvHrYvRAXYnNKB8D6FaNMxnhYHp5UaYr_7Dr9q9beZjszNDzbavdokamaUtdgpjm0Q0d4KcfNaneqZ16N8EXUY-jA5a0Z6-zGioTiWDsGcvPnXTZ4mJr9fowrONSCQaZJz4fJo2ph3aTWsWIy56XRysb1neyqiWGRaJQqN9G8Y9kinI0jgkyM3qlMgA38QrFt7ABxeEy5DlTBXjQ8TFoDOX8MCMqh53soIOtTc5s2ua9utWThgxAfXA="
     ],
     "USER_MAPS": {
         "telethon": {
