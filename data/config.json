@@ -15,7 +15,7 @@
         "ow": 0.1,
         "spam": 0.1,
         "rraid": 0.1,
-        "tagall": 1.5,
+        "tagall": 0.1,
         "onetag": 1.5,
         "ghost": 0.1,
         "sraid": 0.5
