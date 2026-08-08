@@ -36,7 +36,7 @@
         "raid": false,
         "fuck": false,
         "multi": false,
-        "ow": true,
+        "ow": false,
         "spam": false,
         "rraid": false,
         "tagall": false,
